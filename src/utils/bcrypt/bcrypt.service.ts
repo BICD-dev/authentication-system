@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 export class BcryptService{
     private readonly saltRounds: number = 10;
     
-    constructor(password: string, saltRounds: number = 10) {
+    constructor(saltRounds: number = 10) {
         this.saltRounds = saltRounds;
     }
     /**
