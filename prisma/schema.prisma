@@ -67,6 +67,7 @@ model User {
 }
 
 // this  credentials model is separate from the user model because i  want to support multple athentcation methods, not all users willl have passwords, some will have oauth accounts, some will have passkeys, etc. so i want to keep the credentials separate from the user model to allow for more flexibility in the future when i want to add more authentication methods.
+// the relation should be one to one because a user can only have one password, but a user can have multiple oauth accounts, passkeys, etc. so those will be in separate tables with one to many relations to the user model.
  model Credential {
   id              String   @id @default(cuid())
 
@@ -79,6 +80,8 @@ model User {
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@unique([userId])
 }
 
 model OAuthAccount {
