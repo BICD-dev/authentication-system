@@ -11,13 +11,248 @@ generator client {
 datasource db {
   provider = "sqlite"
 }
-
+enum UserStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  BLACKLISTED
+  DELETED
+}
+enum OAuthProvider {
+  GOOGLE
+  APPLE
+}
+enum MagicLinkType {
+  LOGIN
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+}
+enum BlockType {
+  USER_ID
+  EMAIL
+  DOMAIN
+  IP_ADDRESS
+}
 model User {
-  id        String      @id @default(uuid())
-  first_name      String
-  last_name       String
-  email     String?   @unique // this has to be optional to allow for users who register with phone number instead of email
-  phone_number String?   @unique // this has to be optional to allow for users who register with email instead of phone number
-  password  String
-  createdAt DateTime @default(now())
+  id                String   @id @default(cuid())
+  email             String?  @unique
+  emailVerified     Boolean  @default(false)
+
+  firstName         String?
+  lastName          String?
+  avatar            String?
+
+  status            UserStatus @default(PENDING_VERIFICATION)
+
+  isWhitelisted     Boolean @default(false)
+  isBlacklisted     Boolean @default(false)
+
+  lastLoginAt       DateTime?
+  deletedAt         DateTime? // for soft delete
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  credentials       Credential[]
+  oauthAccounts     OAuthAccount[]
+  sessions          Session[]
+  passkeys          Passkey[]
+  userRoles         UserRole[]
+
+  refreshTokens RefreshToken[]
+
+  mfasettings MFASetting[]
+
+  magicLinks MagicLink[]
+}
+
+// this  credentials model is separate from the user model because i  want to support multple athentcation methods, not all users willl have passwords, some will have oauth accounts, some will have passkeys, etc. so i want to keep the credentials separate from the user model to allow for more flexibility in the future when i want to add more authentication methods.
+ model Credential {
+  id              String   @id @default(cuid())
+
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+
+  passwordHash    String
+
+  passwordChangedAt DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model OAuthAccount {
+  id                String @id @default(cuid())
+
+  userId            String
+  user              User @relation(fields: [userId], references: [id])
+
+  provider          OAuthProvider
+  providerUserId    String
+
+  email             String?
+
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, providerUserId])
+}
+
+model Session {
+  id                String @id @default(cuid())
+
+  userId            String
+  user              User @relation(fields: [userId], references: [id])
+
+  tokenHash         String
+
+  ipAddress         String?
+  userAgent         String?
+
+  expiresAt         DateTime
+
+  revokedAt         DateTime?
+
+  createdAt         DateTime @default(now())
+}
+
+model RefreshToken {
+  id                String @id @default(cuid())
+
+  userId            String
+  user              User @relation(fields: [userId], references: [id])
+
+  tokenHash         String
+
+  expiresAt         DateTime
+
+  revokedAt         DateTime?
+
+  createdAt         DateTime @default(now())
+}
+
+model Passkey {
+  id                String @id @default(cuid())
+
+  userId            String
+  user              User @relation(fields: [userId], references: [id])
+
+  credentialId      String @unique
+
+  publicKey         String
+
+  counter           Int
+
+  deviceName        String?
+
+  createdAt         DateTime @default(now())
+}
+
+// should i stor the  backup  codes as a json array or in a separate table?
+model MFASetting {
+  id                String @id @default(cuid())
+
+  userId            String @unique
+  user              User @relation(fields: [userId], references: [id])
+
+  enabled           Boolean @default(false)
+
+  secret            String?
+
+  backupCodes       String?
+
+  createdAt         DateTime @default(now())
+}
+
+model Role {
+  id          String @id @default(cuid())
+
+  name        String @unique
+
+  description String?
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+}
+// permissions  like:   user:create
+// user:update
+// user:delete
+
+// audit:view
+model Permission {
+  id          String @id @default(cuid())
+
+  name        String @unique
+
+  description String?
+
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  roleId        String
+  permissionId  String
+
+  role          Role @relation(fields:[roleId], references:[id])
+  permission    Permission @relation(fields:[permissionId], references:[id])
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId      String
+  roleId      String
+
+  user        User @relation(fields:[userId], references:[id])
+  role        Role @relation(fields:[roleId], references:[id])
+
+  @@id([userId, roleId])
+}
+
+model MagicLink {
+  id            String @id @default(cuid())
+
+  userId        String?
+  user          User? @relation(fields:[userId], references:[id])
+
+  email         String
+
+  tokenHash     String
+
+  type          MagicLinkType
+
+  expiresAt     DateTime
+
+  usedAt        DateTime?
+
+  createdAt     DateTime @default(now())
+}
+
+model BlockedEntity {
+  id          String @id @default(cuid())
+
+  type        BlockType
+
+  value       String
+
+  reason      String?
+
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id              String @id @default(cuid())
+
+  actorUserId     String?
+
+  targetUserId    String?
+
+  action          String
+
+  metadata        String?
+
+  ipAddress       String?
+
+  userAgent       String?
+
+  createdAt       DateTime @default(now())
 }
