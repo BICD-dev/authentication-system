@@ -2,7 +2,7 @@
 import { IEmailService } from './IEmailService';
 import { GmailService } from './GmailService';
 import { BrevoService } from './BrevoService';
-import { Env } from '../../utils/config/config';
+import { Env } from '../../config/env';
 
 export class EmailServiceFactory {
   static createEmailService(): IEmailService {

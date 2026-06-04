@@ -1,7 +1,7 @@
 // src/services/email/GmailService.ts
 import nodemailer, { Transporter } from 'nodemailer';
 import { IEmailService, EmailOptions } from './IEmailService';
-import { Env } from '../../utils/config/config';
+import { Env } from '../../config/env';
 
 export class GmailService implements IEmailService {
   private transporter: Transporter;
