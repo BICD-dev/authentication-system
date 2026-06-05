@@ -8,6 +8,15 @@ import { LoginWithPasswordDto } from "./dto/loginWithPassword.dto";
 import { IAuthService } from "./interface/auth.service.interface";
 import { prisma } from "../lib/prisma";
 import "dotenv/config"
+interface loginResponse  {
+     user:{
+                id:string,
+                first_name:string | null,
+                last_name:string | null,
+                email:string | null,
+            },
+            token:string
+}
 export class AuthenticationService implements IAuthService{
     
     private readonly userRepository : UserRepository
@@ -53,8 +62,7 @@ export class AuthenticationService implements IAuthService{
         }
 
     }
-
-    async loginWithPassword(data:LoginWithPasswordDto): Promise<any> {
+    async loginWithPassword(data:LoginWithPasswordDto): Promise<loginResponse> {
         const validate = await validateDto(LoginWithPasswordDto, data);
         const {email, password} = validate;
         // check that user's email or phone exists

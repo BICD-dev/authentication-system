@@ -17,5 +17,5 @@ app.use(notFoundHandler);
 app.use(globalErrorHandler);
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+  console.log(`Server is running on port ${PORT}`); 
+}); 

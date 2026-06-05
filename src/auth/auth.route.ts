@@ -1,10 +1,11 @@
 import { Router } from "express";
+import { AuthController } from "./auth.controller";
 const router = Router();
-
+const authenticationController = new AuthController()
 
 // Email and password
-
-
+router.post("/",authenticationController.createAccountWithEmailPassword  )
+router.post("/login",authenticationController.loginWithPassword)
 // username and password
 
 
