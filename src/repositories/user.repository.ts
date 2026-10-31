@@ -1,13 +1,15 @@
-import { User ,Credential } from "../generated/prisma/client";
+import { User } from "../generated/prisma/client";
 import { prisma } from "../lib/prisma";
 import type { Prisma } from "../generated/prisma/client";
 import { IRepository } from "./interface/IRepository";
 
-export class UserRepository  implements IRepository<User, { email?: string; firstName?: string; lastName?: string }, Partial<User>> {
+export class UserRepository  implements IRepository<User, { email?: string; firstName?: string; lastName?: string, password?:string }, Partial<User>> {
+
   async create(data: {
     email?: string;
     firstName?: string;
     lastName?: string;
+    password?:string;
   }, tx?: Prisma.TransactionClient): Promise<User> {
     return new Promise(async (resolve, reject) => {
         try {
@@ -16,7 +18,8 @@ export class UserRepository  implements IRepository<User, { email?: string; firs
                 data: {
                     email: data.email,
                     firstName: data.firstName,
-                    lastName: data.lastName
+                    lastName: data.lastName,
+                    password: data.password
                 }
             })
             resolve(user)
@@ -107,51 +110,5 @@ export class UserRepository  implements IRepository<User, { email?: string; firs
     });
   }
 
-  async createCredential(data: { user_id: string; passwordHash: string }, tx?: Prisma.TransactionClient): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-        try {
-            // i am not checkin if th credential already exists because the user_id is unique in the credentials table and it will throw an error if it already exists
-            const db = tx ?? prisma;
-            await db.credential.create({
-                data: {
-                    userId: data.user_id,
-                    passwordHash: data.passwordHash
-                }
-            })
-            resolve()
-        } catch (error) {
-            reject(error)
-        }
-    })
-  }
 
-  async findCredentialByUserId(userId: string, tx?: Prisma.TransactionClient): Promise<Partial<Credential> | null> {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const db = tx ?? prisma;
-            const credential = await db.credential.findUnique({
-                where: { userId },
-                select: { passwordHash: true }
-            })
-            resolve(credential)
-        } catch (error) {
-            reject(error)
-        }
-    })
-  }
-
-  async updateCredential(userId: string, passwordHash: string, tx?: Prisma.TransactionClient): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const db = tx ?? prisma;
-            await db.credential.update({
-                where: { userId },
-                data: { passwordHash }
-            })
-            resolve()
-        } catch (error) {
-            reject(error)
-        }
-    })
-  }
 }

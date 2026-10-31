@@ -4,7 +4,7 @@ const router = Router();
 const authenticationController = new AuthController()
 
 // Email and password
-router.post("/",authenticationController.createAccountWithEmailPassword  )
+router.post("/signup",authenticationController.createAccountWithEmailPassword  )
 router.post("/login",authenticationController.loginWithPassword)
 // username and password
 

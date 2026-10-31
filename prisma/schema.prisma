@@ -13,14 +13,14 @@ datasource db {
 }
 enum UserStatus {
   ACTIVE
-  PENDING_VERIFICATION
-  SUSPENDED
-  BLACKLISTED
-  DELETED
+  INACTIVE
+  // DELETED
 }
 enum OAuthProvider {
   GOOGLE
   APPLE
+  GITHUB
+  MICROSOFT 
 }
 enum MagicLinkType {
   LOGIN
@@ -36,53 +36,40 @@ enum BlockType {
 model User {
   id                String   @id @default(cuid())
   email             String?  @unique
-  emailVerified     Boolean  @default(false)
+  emailVerifiedAt     DateTime?  
+  phone   String?   @unique
+  phoneVerifiedAt      DateTime?
 
   firstName         String?
   lastName          String?
   avatar            String?
 
-  status            UserStatus @default(PENDING_VERIFICATION)
+  status            UserStatus @default(ACTIVE)
 
-  isWhitelisted     Boolean @default(false)
-  isBlacklisted     Boolean @default(false)
+  // isWhitelisted     Boolean @default(false)
+  // isBlacklisted     Boolean @default(false)
 
-  lastLoginAt       DateTime?
+  // lastLoginAt       DateTime?
+  
+  password    String?
+
+  passwordChangedAt DateTime?
   deletedAt         DateTime? // for soft delete
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  credentials       Credential[]
   oauthAccounts     OAuthAccount[]
   sessions          Session[]
   passkeys          Passkey[]
   userRoles         UserRole[]
 
-  refreshTokens RefreshToken[]
 
   mfasettings MFASetting[]
 
   magicLinks MagicLink[]
 }
 
-// this  credentials model is separate from the user model because i  want to support multple athentcation methods, not all users willl have passwords, some will have oauth accounts, some will have passkeys, etc. so i want to keep the credentials separate from the user model to allow for more flexibility in the future when i want to add more authentication methods.
-// the relation should be one to one because a user can only have one password, but a user can have multiple oauth accounts, passkeys, etc. so those will be in separate tables with one to many relations to the user model.
- model Credential {
-  id              String   @id @default(cuid())
-
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-
-  passwordHash    String
-
-  passwordChangedAt DateTime?
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([userId])
-}
 
 model OAuthAccount {
   id                String @id @default(cuid())
@@ -108,23 +95,7 @@ model Session {
 
   tokenHash         String
 
-  ipAddress         String?
-  userAgent         String?
-
-  expiresAt         DateTime
-
-  revokedAt         DateTime?
-
-  createdAt         DateTime @default(now())
-}
-
-model RefreshToken {
-  id                String @id @default(cuid())
-
-  userId            String
-  user              User @relation(fields: [userId], references: [id])
-
-  tokenHash         String
+  metadata          Json?
 
   expiresAt         DateTime
 
