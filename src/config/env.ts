@@ -15,6 +15,9 @@ export class Env {
 	static readonly EMAIL_USER = Env.requireString("EMAIL_USER");
 	static readonly EMAIL_APP_PASSWORD = Env.requireString("EMAIL_APP_PASSWORD");
 	static readonly EMAIL_PROVIDER = Env.requireString("EMAIL_PROVIDER");
+	static readonly CACHE_PROVIDER = Env.optionalString("CACHE_PROVIDER", "memory");
+	static readonly REDIS_URL = Env.optionalString("REDIS_URL", "redis://127.0.0.1:6379");
+	static readonly REDIS_KEY_PREFIX = Env.optionalString("REDIS_KEY_PREFIX", "auth:");
 
 	// Optional Brevo SMTP settings (present in .env.example)
 	static readonly BREVO_SMTP_HOST = Env.optionalString(
