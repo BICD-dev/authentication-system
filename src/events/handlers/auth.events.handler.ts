@@ -35,7 +35,7 @@ export function registerAuthEventHandlers(): void {
         const { userId, email, firstName } = payload;
         
         try {
-            await sendWelcomeEmail(userId, email, firstName);
+            await sendWelcomeEmail( email, firstName);
             await sendVerificationEmail(userId, email, firstName);
         } catch (error) {
             console.error("Error handling USER_REGISTERED event:", error);
@@ -43,7 +43,7 @@ export function registerAuthEventHandlers(): void {
     });
 }
 
-export async function sendWelcomeEmail(userId: string, email: string, firstName: string | null): Promise<void> {
+export async function sendWelcomeEmail( email: string, firstName: string | null): Promise<void> {
     const emailService = EmailServiceFactory.createEmailService();
     try {
         await emailService.sendEmail({
