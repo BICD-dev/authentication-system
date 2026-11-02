@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma";
 import type { Prisma } from "../generated/prisma/client";
 import { IRepository } from "./interface/IRepository";
 
-export class UserRepository  implements IRepository<User, { email?: string; firstName?: string; lastName?: string, password?:string }, Partial<User>> {
+export class UserRepository implements IRepository<User, { email?: string; firstName?: string; lastName?: string, password?:string }, Partial<User>> {
 
   async create(data: {
     email?: string;
@@ -80,13 +80,13 @@ export class UserRepository  implements IRepository<User, { email?: string; firs
         });
     }
 
-  async setEmailVerified(userId: string, tx?: Prisma.TransactionClient): Promise<User> {
+  async setEmailVerifiedAt(userId: string, tx?: Prisma.TransactionClient): Promise<User> {
     return new Promise(async (resolve, reject) => {
         try {
             const db = tx ?? prisma;
             const user = await db.user.update({
                 where: { id: userId },
-                data: { emailVerified: true },
+                data: { emailVerifiedAt: new Date() },
             });
             resolve(user);
         } catch (error) {
