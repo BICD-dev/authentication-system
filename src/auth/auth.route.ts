@@ -6,6 +6,7 @@ const authenticationController = new AuthController()
 // Email and password
 router.post("/signup",authenticationController.createAccountWithEmailPassword  )
 router.post("/login",authenticationController.loginWithPassword)
+router.post("/otp/verify-email",authenticationController.verifyEmailOtp)
 // username and password
 
 

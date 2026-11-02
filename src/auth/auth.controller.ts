@@ -35,9 +35,20 @@ export class AuthController {
                   sameSite:"lax" // change to strict later
             })
             const resObj = new ResponseDto(ResponseStatus.SUCCESS, SuccessMessages.LOGIN_SUCCESSFUL)
+            return res.status(HttpStatus.OK).json(resObj);
         } catch (error) {
             next(error)
         }
     }
-    
+
+    verifyEmailOtp:RequestHandler = async (req:Request, res:Response, next:NextFunction)=>{
+        try {
+            const data = req.body;
+            const result = await this.authService.verifyEmailOtp(data);
+            const resObj = new ResponseDto(ResponseStatus.SUCCESS, SuccessMessages.EMAIL_VERIFICATION_SUCCESSFUL, result);
+            return res.status(HttpStatus.OK).json(resObj);
+        } catch (error) {
+            next(error)
+        }
+    }
 }

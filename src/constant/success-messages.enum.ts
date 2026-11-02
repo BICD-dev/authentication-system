@@ -4,6 +4,7 @@ export enum SuccessMessages {
 
     LOGIN_SUCCESSFUL="Login successful",
     LOGOUT_SUCCESSFUL="Logout successful",
+    EMAIL_VERIFICATION_SUCCESSFUL = "Email verification successful",
 
     
 }
