@@ -1,10 +1,11 @@
 import { eventBus } from "../event-bus";
 import { AuthEvents } from "../events.constants";
-import { UserRegisteredEventPayload } from "../interface/auth.events.interface";
+import { SendVerificationEmailEventPayload, UserRegisteredEventPayload } from "../interface/auth.events.interface";
 import { EmailServiceFactory } from "../../service/email/EmailServiceFactory";
 import { OTPService } from "../../utils/otp.service";
 import { CacheFactory } from "../../cache/cache.factory";
 
+// seperate these email templates later
 function buildWelcomeEmailHtml(firstName?: string | null): string {
     const displayName = firstName ?? "there";
 
@@ -30,6 +31,18 @@ function buildVerificationEmailHtml(firstName: string | null | undefined, verifi
   `;
 }
 
+function buildLoginNotificationEmailHtml(firstName: string | null | undefined): string {
+    const displayName = firstName ?? "there";
+    return `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2937;">
+      <h2 style="margin-bottom: 12px;">Hello, ${displayName}</h2>
+        <p>We noticed a login to your account. If this was you, no further action is needed.</p>
+        <p>If you did not log in, please secure your account immediately.</p>
+    </div>
+  `;
+}
+
+
 export function registerAuthEventHandlers(): void {
     eventBus.on(AuthEvents.USER_REGISTERED, async (payload: UserRegisteredEventPayload) => {
         const { userId, email, firstName } = payload;
@@ -43,7 +56,35 @@ export function registerAuthEventHandlers(): void {
     });
 }
 
-export async function sendWelcomeEmail( email: string, firstName: string | null): Promise<void> {
+export function sendVerificationEmailEventHandler(): void {
+    eventBus.on(AuthEvents.SEND_VERIFICATION_EMAIL, async (payload: SendVerificationEmailEventPayload) => {
+        const { userId, email, firstName } = payload;
+
+        try {
+            await sendVerificationEmail(userId, email, firstName);
+        } catch (error) {
+            console.error("Error handling SEND_VERIFICATION_EMAIL event:", error);
+        }
+    });
+}
+
+export function loginEventHandler(): void {
+    eventBus.on(AuthEvents.USER_LOGGED_IN, async (payload: any) => {
+        const { firstName, email } = payload;
+        try {
+            const emailService = EmailServiceFactory.createEmailService();
+            await emailService.sendEmail({
+                to: email,
+                subject: "Login Notification",
+                html: buildLoginNotificationEmailHtml(firstName),
+            });
+        } catch (error) {
+            console.error("Error handling USER_LOGGED_IN event:", error);
+        }
+    });
+}
+
+async function sendWelcomeEmail( email: string, firstName: string | null): Promise<void> {
     const emailService = EmailServiceFactory.createEmailService();
     try {
         await emailService.sendEmail({
@@ -57,13 +98,19 @@ export async function sendWelcomeEmail( email: string, firstName: string | null)
     }
 }
 
-export async function sendVerificationEmail(userId: string, email: string, firstName: string | null): Promise<void> {
+async function sendVerificationEmail(userId: string, email: string, firstName: string | null): Promise<void> {
     const emailService = EmailServiceFactory.createEmailService();
     const otpService = new OTPService();
     const verificationCode = otpService.generateVerificationCode();
     const verificationExpiry = otpService.generateVerificationExpiry(15);
     const cache = CacheFactory.createCacheStore();
-    await cache.set(`email_verification:${userId}`, JSON.stringify({ code: verificationCode, expiresAt: verificationExpiry }), 15 * 60); // store for 15 minutes
+    const otpKey = `email_verification:${userId}`;
+    const otpPayload = JSON.stringify({
+        code: verificationCode,
+        expiresAt: verificationExpiry.toISOString(),
+    });
+
+    await cache.set(otpKey, otpPayload, 15 * 60); // store for 15 minutes
     try {
         await emailService.sendEmail({
             to: email,

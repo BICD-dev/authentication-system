@@ -1,9 +1,15 @@
 import { eventBus } from "./event-bus";
 import { AuthEvents } from "./events.constants";
-import { UserRegisteredEventPayload } from "./interface/auth.events.interface";
+import { SendVerificationEmailEventPayload, UserLoggedInEventPayload, UserRegisteredEventPayload } from "./interface/auth.events.interface";
 
 export class EventsService {
   emitUserRegistered(payload: UserRegisteredEventPayload): void {
     eventBus.emit(AuthEvents.USER_REGISTERED, payload);
+  }
+  emitUserLoggedIn(payload: UserLoggedInEventPayload): void {
+    eventBus.emit(AuthEvents.USER_LOGGED_IN, payload);
+  }
+  emitSendVerificationEmail(payload: SendVerificationEmailEventPayload): void {
+    eventBus.emit(AuthEvents.SEND_VERIFICATION_EMAIL, payload);
   }
 }
