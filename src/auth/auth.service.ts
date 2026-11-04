@@ -163,4 +163,24 @@ export class AuthenticationService implements IAuthService {
         await this.redisCacheStore.del(otpKey);
         return { message: "Email verified successfully" };
     }
+
+    async resendEmailVerificationOtp(email: string): Promise<void> {
+        const user = await this.userRepository.findByEmail(email);
+        if (!user) {
+            console.log(`user with email ${email} does not exist `);
+            return;
+        }
+        if (user.emailVerifiedAt) {
+            console.log(`user with email ${email} is already verified `);
+            return;
+        }
+        // emit event to trigger the sending of the email verification otp
+        this.eventsService.emitSendVerificationEmail({
+            userId: user.id,
+            firstName: user.firstName,
+            email: email,
+        });
+
+        return;
+    }
 }

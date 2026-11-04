@@ -4,6 +4,7 @@ import { ResponseDto } from "../dtos/response.dto";
 import { HttpStatus } from "../constant/http-status.enum";
 import { ResponseStatus } from "../dtos/interface/response.interface";
 import { SuccessMessages } from "../constant/success-messages.enum";
+import { AppError } from "../utils/middleware/errorHandler";
 
 export class AuthController {
     private readonly authService: AuthenticationService;
@@ -46,6 +47,20 @@ export class AuthController {
             const data = req.body;
             const result = await this.authService.verifyEmailOtp(data);
             const resObj = new ResponseDto(ResponseStatus.SUCCESS, SuccessMessages.EMAIL_VERIFICATION_SUCCESSFUL, result);
+            return res.status(HttpStatus.OK).json(resObj);
+        } catch (error) {
+            next(error)
+        }
+    }
+
+    resendEmailOtp:RequestHandler = async (req:Request, res:Response, next:NextFunction)=>{
+        try {
+            const { email } = req.query;
+            if (!email) {
+                throw new AppError(400, "Email query parameter is required");
+            }
+            await this.authService.resendEmailVerificationOtp(email as string);
+            const resObj = new ResponseDto(ResponseStatus.SUCCESS, SuccessMessages.EMAIL_VERIFICATION_RESENT);
             return res.status(HttpStatus.OK).json(resObj);
         } catch (error) {
             next(error)
