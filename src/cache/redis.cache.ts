@@ -1,4 +1,4 @@
-import { createClient, RedisClientType } from "redis";
+import { createClient, type RedisClientType } from "redis";
 import { CacheStore } from "./cache.store";
 
 export class RedisCacheStore implements CacheStore {
@@ -18,14 +18,13 @@ export class RedisCacheStore implements CacheStore {
 		return `${this.keyPrefix}${key}`;
 	}
 
-	private async ensureConnected(): Promise<void> {
+	async connect(): Promise<void> {
 		if (!this.client.isOpen) {
 			await this.client.connect();
 		}
 	}
 
 	async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
-		await this.ensureConnected();
 
 		const namespacedKey = this.getKey(key);
 		if (ttlSeconds && ttlSeconds > 0) {
@@ -37,12 +36,10 @@ export class RedisCacheStore implements CacheStore {
 	}
 
 	async get(key: string): Promise<string | null> {
-		await this.ensureConnected();
 		return this.client.get(this.getKey(key));
 	}
 
 	async del(key: string): Promise<void> {
-		await this.ensureConnected();
 		await this.client.del(this.getKey(key));
 	}
 
