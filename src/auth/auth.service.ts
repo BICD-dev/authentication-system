@@ -107,7 +107,7 @@ export class AuthenticationService implements IAuthService {
             role: "user" // add role to db later
         })
         // update user's last login and emit event to trigger the sending of the login notification email
-        await this.userRepository.updateLastLogin(userExists.id);
+        // await this.userRepository.updateLastLogin(userExists.id);
         if (userExists.email) {
             this.eventsService.emitUserLoggedIn({
                 email: userExists.email,

@@ -95,20 +95,20 @@ export class UserRepository implements IRepository<User, { email?: string; first
     });
   }
 
-  async updateLastLogin(userId: string, tx?: Prisma.TransactionClient): Promise<User> {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const db = tx ?? prisma;
-            const user = await db.user.update({
-                where: { id: userId },
-                data: { lastLoginAt: new Date() },
-            });
-            resolve(user);
-        } catch (error) {
-            reject(error);
-        }
-    });
-  }
+//   async updateLastLogin(userId: string, tx?: Prisma.TransactionClient): Promise<User> {
+//     return new Promise(async (resolve, reject) => {
+//         try {
+//             const db = tx ?? prisma;
+//             const user = await db.user.update({
+//                 where: { id: userId },
+//                 data: { lastLoginAt: new Date() },
+//             });
+//             resolve(user);
+//         } catch (error) {
+//             reject(error);
+//         }
+//     });
+//   }
 
 
 }
