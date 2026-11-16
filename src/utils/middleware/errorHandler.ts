@@ -7,15 +7,24 @@ import type {
 } from "express";
 import { ErrorMessages } from "../../constant/error-messages.enum";
 import { HttpStatus } from "../../constant/http-status.enum";
+import { ApiErrorDetail } from "../../dtos/interface/response.interface";
+import { ResponseDto } from "../../dtos/response.dto";
 
 export class ErrorHandler extends Error {
     statusCode: number;
     isOperational: boolean;
+    errors?: ApiErrorDetail[];
 
-    constructor(statusCode: number, message: string, isOperational = true) {
+    constructor(
+        statusCode: number,
+        message: string,
+        isOperational = true,
+        errors?: ApiErrorDetail[]
+    ) {
         super(message);
         this.statusCode = statusCode;
         this.isOperational = isOperational;
+        this.errors = errors;
 
         Object.setPrototypeOf(this, new.target.prototype);
 
@@ -26,8 +35,8 @@ export class ErrorHandler extends Error {
 }
 
 export class AppError extends ErrorHandler {
-    constructor(statusCode: number, message: string) {
-        super(statusCode, message, true);
+    constructor(statusCode: number, message: string, errors?: ApiErrorDetail[]) {
+        super(statusCode, message, true, errors);
     }
 }
 
@@ -57,10 +66,7 @@ export const globalErrorHandler: ErrorRequestHandler = (
     const isHandledError = err instanceof ErrorHandler;
     const statusCode = isHandledError ? err.statusCode : HttpStatus.INTERNAL_SERVER_ERROR;
     const message = isHandledError ? err.message : ErrorMessages.INTERNAL_SERVER_ERROR;
+    const errors = isHandledError ? err.errors : undefined;
 
-    res.status(statusCode).json({
-        success: false,
-        statusCode,
-        message,
-    });
+    res.status(statusCode).json(ResponseDto.failure(statusCode, message, errors));
 };

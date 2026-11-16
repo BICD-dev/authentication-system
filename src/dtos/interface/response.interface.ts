@@ -1,10 +1,15 @@
-export interface IResponse {
-    status: ResponseStatus;
-    message:string;
-    data?:any;
+export interface ApiErrorDetail {
+    field?: string;
+    message: string;
 }
 
-export enum ResponseStatus {
-    SUCCESS = 'success',
-    ERROR = 'error',
+export interface ApiResponse<T = unknown> {
+    success: boolean;
+    statusCode: number;
+    message: string;
+    data?: T;
+    errors?: ApiErrorDetail[];
 }
+
+// Backward-compatible alias for code that still imports IResponse.
+export type IResponse<T = unknown> = ApiResponse<T>;

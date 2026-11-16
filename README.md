@@ -14,26 +14,35 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 
 ## 🚀 Features
 
-- User registration and login
+### Implemented
+
+- User registration and login with email + password
 - JWT-based authentication
-- Session-based authentication
-- OAuth (third-party login integrations – planned)
+- Email verification with OTP
+- Secure password hashing with bcrypt
+- Input validation and structured error handling
+- Provider-based email delivery (Gmail / Brevo)
+- Cache abstraction (memory / Redis)
+
+### In progress / planned
+
+- Session-based authentication and refresh-token rotation
+- Profile and logout endpoints
+- Password reset
+- OAuth 2.0 (Google, GitHub, Microsoft, Apple)
 - Role-based access control (RBAC)
-- Email verification (planned)
-- Password reset functionality (planned)
-- Token refresh mechanism
-- Secure password hashing
-- Input validation and error handling
+- API key authentication
+- Multi-factor authentication (MFA)
 
 ---
 
 ## 🧠 Authentication Strategies Implemented / Planned
 
-- **JWT (JSON Web Tokens)**
-- **Session-based authentication**
-- **OAuth 2.0 (Google, GitHub, etc.)**
-- **API Key authentication**
-- **Multi-factor authentication (MFA) (planned)**
+- **JWT (JSON Web Tokens)** — implemented
+- **Session-based authentication** — in progress (refresh-token sessions)
+- **OAuth 2.0 (Google, GitHub, Microsoft, Apple)** — planned
+- **API Key authentication** — planned
+- **Multi-factor authentication (MFA)** — planned
 
 ---
 
@@ -42,10 +51,11 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 - **Node.js**
 - **Express.js**
 - **TypeScript**
-- **PostgreSQL / MongoDB** (depending on your setup)
-- **Prisma / TypeORM / Sequelize** (optional ORM)
+- **SQLite** with **Prisma 7** and `better-sqlite3`
 - **bcrypt** (password hashing)
 - **jsonwebtoken** (JWT handling)
+- **Redis** (optional cache provider)
+- **Nodemailer** with Gmail or Brevo SMTP
 
 ---
 
@@ -60,12 +70,21 @@ src/
 │   ├── auth.service.ts
 │   ├── dto/
 │   └── interface/
+├── cache/
 ├── config/
 ├── constant/
 ├── dtos/
+├── events/
+├── generated/          # Prisma client (gitignored)
+├── lib/
+├── repositories/
+├── service/
+│   └── email/
+├── session/
 └── utils/
-	├── errorHandler/
-	└── middleware/
+    ├── bcrypt/
+    ├── jwt/
+    └── middleware/
 ```
 
 ---
@@ -74,7 +93,7 @@ src/
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/authentication-system.git
+git clone https://github.com/BICD-dev/authentication-system.git
 
 # Navigate into the project
 cd authentication-system
@@ -87,12 +106,7 @@ npm install
 
 Create a `.env` file in the root directory:
 
-```env
-PORT=5000
-DATABASE_URL=your_database_url
-JWT_SECRET=your_jwt_secret
-SESSION_SECRET=your_session_secret
-```
+copy the content of `.env.example` into the newly created `.env`
 
 ## ▶️ Running the Application
 
@@ -107,14 +121,58 @@ npm run build
 npm start
 ```
 
-## 📡 API Endpoints (Sample)
+## 📦 Response Format
 
-| Method | Endpoint             | Description              |
-| ------ | -------------------- | ------------------------ |
-| POST   | /api/auth/register   | Register a new user      |
-| POST   | /api/auth/login      | Login user               |
-| GET    | /api/auth/profile    | Get authenticated user   |
-| POST   | /api/auth/logout     | Logout user              |
+Every success and error response uses the same envelope:
+
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Registration successful",
+  "data": {}
+}
+```
+
+Validation and application errors include optional field-level details:
+
+```json
+{
+  "success": false,
+  "statusCode": 400,
+  "message": "email must be a valid email address",
+  "errors": [
+    {
+      "field": "email",
+      "message": "email must be a valid email address"
+    }
+  ]
+}
+```
+
+`data` is omitted when there is no payload, and `errors` is omitted when there
+are no structured error details.
+
+## 📡 API Endpoints
+
+### Implemented
+
+| Method | Endpoint                    | Description                         |
+| ------ | --------------------------- | ----------------------------------- |
+| POST   | `/api/auth/signup`          | Register a new user                 |
+| POST   | `/api/auth/login`           | Login user                          |
+| POST   | `/api/auth/otp/verify`      | Verify the email OTP                |
+| POST   | `/api/auth/otp/resend`      | Resend the email verification OTP   |
+
+### Planned
+
+| Method | Endpoint                      | Description                     |
+| ------ | ----------------------------- | ------------------------------- |
+| POST   | `/api/auth/refresh`           | Refresh the current session     |
+| GET    | `/api/auth/profile`           | Get the authenticated user      |
+| POST   | `/api/auth/logout`            | Logout and revoke the session   |
+| POST   | `/api/auth/password/forgot`   | Request a password reset        |
+| POST   | `/api/auth/password/reset`    | Complete a password reset       |
 
 ## 🔒 Security Considerations
 

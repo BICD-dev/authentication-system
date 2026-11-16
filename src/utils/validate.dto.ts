@@ -1,19 +1,33 @@
 // utils/validate.dto.ts
 import { validate, ValidationError } from 'class-validator';
 import { plainToInstance, ClassConstructor } from 'class-transformer';
+import { HttpStatus } from '../constant/http-status.enum';
+import { ApiErrorDetail } from '../dtos/interface/response.interface';
 import { AppError } from './middleware/errorHandler';
 
-function extractMessages(errors: ValidationError[]): string[] {
-  const messages: string[] = [];
+function extractErrors(
+  errors: ValidationError[],
+  parentPath = ''
+): ApiErrorDetail[] {
+  const details: ApiErrorDetail[] = [];
+
   for (const error of errors) {
+    const field = parentPath
+      ? `${parentPath}.${error.property}`
+      : error.property;
+
     if (error.constraints) {
-      messages.push(...Object.values(error.constraints));
+      for (const message of Object.values(error.constraints)) {
+        details.push({ field, message });
+      }
     }
+
     if (error.children && error.children.length > 0) {
-      messages.push(...extractMessages(error.children));
+      details.push(...extractErrors(error.children, field));
     }
   }
-  return messages;
+
+  return details;
 }
 
 export async function validateDto<T extends object>(
@@ -28,9 +42,11 @@ export async function validateDto<T extends object>(
   });
 
   if (errors.length > 0) {
-    // i removed the "validation failed" before the message so that itll be easier for frontend to display the error message directly - if they choose to
-    const messages = extractMessages(errors).join('; ');
-    throw new AppError(400,`${messages}`); 
+    // Keep the joined message for clients that display a single string, and
+    // expose structured field-level details for clients that need them.
+    const details = extractErrors(errors);
+    const message = details.map((detail) => detail.message).join('; ');
+    throw new AppError(HttpStatus.BAD_REQUEST, message, details);
   }
 
   return dtoInstance;
