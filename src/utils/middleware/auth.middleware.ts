@@ -26,7 +26,7 @@ export const authenticate = async (
       throw new AppError(401, "Unauthorized: missing bearer token");
     }
 
-    const jwtService = new JwtService(Env.JWT_SECRET);
+    const jwtService = new JwtService(Env.JWT_SECRET, Env.JWT_EXPIRES_IN);
     const payload = await jwtService.verifyToken(token);
 
     if (!payload || typeof payload !== "object" || !payload.id) {

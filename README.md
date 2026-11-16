@@ -17,7 +17,8 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 ### Implemented
 
 - User registration and login with email + password
-- JWT-based authentication
+- JWT-based authentication with configurable lifetime
+- Refresh-token sessions with rotation and reuse detection
 - Email verification with OTP
 - Secure password hashing with bcrypt
 - Input validation and structured error handling
@@ -26,7 +27,6 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 
 ### In progress / planned
 
-- Session-based authentication and refresh-token rotation
 - Profile and logout endpoints
 - Password reset
 - OAuth 2.0 (Google, GitHub, Microsoft, Apple)
@@ -39,7 +39,7 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 ## 🧠 Authentication Strategies Implemented / Planned
 
 - **JWT (JSON Web Tokens)** — implemented
-- **Session-based authentication** — in progress (refresh-token sessions)
+- **Session-based authentication** — implemented (refresh-token sessions)
 - **OAuth 2.0 (Google, GitHub, Microsoft, Apple)** — planned
 - **API Key authentication** — planned
 - **Multi-factor authentication (MFA)** — planned
@@ -84,7 +84,9 @@ src/
 └── utils/
     ├── bcrypt/
     ├── jwt/
-    └── middleware/
+    ├── middleware/
+    ├── cookies.ts
+    └── time.ts
 ```
 
 ---
@@ -153,6 +155,26 @@ Validation and application errors include optional field-level details:
 `data` is omitted when there is no payload, and `errors` is omitted when there
 are no structured error details.
 
+## 🔐 Token & Session Model
+
+Authentication uses a short-lived JWT access token and a long-lived opaque
+refresh token.
+
+| Token         | Lifetime                  | Storage                              |
+| ------------- | ------------------------- | ------------------------------------ |
+| Access token  | `JWT_EXPIRES_IN` (e.g. `2h`) | `access_token` httpOnly cookie, also returned in the login/refresh body |
+| Refresh token | `JWT_REFRESH_EXPIRES_IN` (e.g. `7d`) | `refresh_token` httpOnly cookie |
+
+- Refresh tokens are random 32-byte values. Only a SHA-256 hash is stored in the
+  existing `Session` table; the raw token is never persisted.
+- Each login creates one session row. The row stores the user, token hash,
+  expiry, and optional request metadata (IP and user agent).
+- `POST /api/auth/refresh` rotates the session: the old row is revoked and a new
+  refresh token is issued. Reusing a revoked token is treated as theft and
+  revokes every active session for that user.
+- The login and refresh responses include `accessToken`, `tokenType`, `expiresIn`,
+  and a safe user summary. The refresh token is only sent as a cookie.
+
 ## 📡 API Endpoints
 
 ### Implemented
@@ -160,7 +182,8 @@ are no structured error details.
 | Method | Endpoint                    | Description                         |
 | ------ | --------------------------- | ----------------------------------- |
 | POST   | `/api/auth/signup`          | Register a new user                 |
-| POST   | `/api/auth/login`           | Login user                          |
+| POST   | `/api/auth/login`           | Login user and start a session      |
+| POST   | `/api/auth/refresh`         | Rotate the refresh token            |
 | POST   | `/api/auth/otp/verify`      | Verify the email OTP                |
 | POST   | `/api/auth/otp/resend`      | Resend the email verification OTP   |
 
@@ -168,7 +191,6 @@ are no structured error details.
 
 | Method | Endpoint                      | Description                     |
 | ------ | ----------------------------- | ------------------------------- |
-| POST   | `/api/auth/refresh`           | Refresh the current session     |
 | GET    | `/api/auth/profile`           | Get the authenticated user      |
 | POST   | `/api/auth/logout`            | Logout and revoke the session   |
 | POST   | `/api/auth/password/forgot`   | Request a password reset        |
@@ -177,7 +199,11 @@ are no structured error details.
 ## 🔒 Security Considerations
 
 - Passwords are hashed using `bcrypt`
-- Tokens are signed and verified securely
+- Access tokens are signed JWTs with a configurable lifetime
+- Refresh tokens are random, hashed at rest, rotated on every use, and revoked
+  on logout or reuse detection
+- Auth cookies are `httpOnly` and their `sameSite`/`secure` flags are
+  configurable
 - Sensitive data stored in environment variables
 - Input validation to prevent injection attacks
 - Proper HTTP status codes and error handling

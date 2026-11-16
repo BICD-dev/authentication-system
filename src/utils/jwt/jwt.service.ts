@@ -1,11 +1,17 @@
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
+import { parseDurationToMs } from '../time';
 
 export class JwtService {
     private readonly secretKey: string;
-    private readonly expiresIn: number;
-    constructor(secretKey: string, expiresIn: number = 3600*3) {
+    private readonly expiresInSeconds: number;
+    constructor(secretKey: string, expiresIn: string | number = "3h") {
         this.secretKey = secretKey;
-        this.expiresIn = expiresIn;
+        // jsonwebtoken treats numeric expiresIn values as seconds, so convert
+        // the configured duration once and keep the unit unambiguous.
+        this.expiresInSeconds = Math.max(
+            1,
+            Math.floor(parseDurationToMs(expiresIn) / 1000)
+        );
     }
 
     /**
@@ -31,7 +37,7 @@ export class JwtService {
      */
     generateToken(payload: JwtPayload): string {
         const options: SignOptions = {
-            expiresIn: this.expiresIn,
+            expiresIn: this.expiresInSeconds,
         };
         const token =  jwt.sign(payload, this.secretKey, options );
         return token;

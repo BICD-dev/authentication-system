@@ -7,4 +7,5 @@ export interface IAuthService {
     createAccountWithEmailPassword(data:CreateAccountDto): Promise<any>
     verifyEmailOtp(data:VerifyEmailOtpDto):Promise<any>
     loginWithPassword(data:LoginWithPasswordDto):Promise<any>
+    refreshSession(rawRefreshToken:string):Promise<any>
 }

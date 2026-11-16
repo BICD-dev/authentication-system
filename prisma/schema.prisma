@@ -93,7 +93,7 @@ model Session {
   userId            String
   user              User @relation(fields: [userId], references: [id])
 
-  tokenHash         String
+  tokenHash         String @unique
 
   metadata          Json?
 
@@ -102,6 +102,8 @@ model Session {
   revokedAt         DateTime?
 
   createdAt         DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Passkey {

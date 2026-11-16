@@ -4,6 +4,16 @@ import { ResponseDto } from "../dtos/response.dto";
 import { HttpStatus } from "../constant/http-status.enum";
 import { SuccessMessages } from "../constant/success-messages.enum";
 import { AppError } from "../utils/middleware/errorHandler";
+import { Env } from "../config/env";
+import { getCookie, setAuthCookies } from "../utils/cookies";
+import { SessionMetadata } from "../session/session.service";
+
+function getSessionMetadata(req: Request): SessionMetadata {
+    return {
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+    };
+}
 
 export class AuthController {
     private readonly authService: AuthenticationService;
@@ -30,17 +40,57 @@ export class AuthController {
     loginWithPassword:RequestHandler = async  (req:Request, res:Response,  next:NextFunction)=> {
         try {
             const data = req.body;
-            const result = await this.authService.loginWithPassword(data);
-            // create a session for the  user
-            // This implementation is temporary
-            res.cookie("login",result.token,{
-                expires: new Date(Date.now() + 900000),
-                 httpOnly: true, 
-                  sameSite:"lax" // change to strict later
-            })
+            const result = await this.authService.loginWithPassword(
+                data,
+                getSessionMetadata(req)
+            );
+            setAuthCookies(res, {
+                accessToken: result.accessToken,
+                refreshToken: result.refreshToken,
+            });
             const resObj = ResponseDto.success(
                 HttpStatus.OK,
-                SuccessMessages.LOGIN_SUCCESSFUL
+                SuccessMessages.LOGIN_SUCCESSFUL,
+                {
+                    user: result.user,
+                    accessToken: result.accessToken,
+                    tokenType: "Bearer",
+                    expiresIn: Env.JWT_EXPIRES_IN,
+                }
+            );
+            return res.status(HttpStatus.OK).json(resObj);
+        } catch (error) {
+            next(error)
+        }
+    }
+
+    refreshSession:RequestHandler = async (req:Request, res:Response, next:NextFunction)=>{
+        try {
+            const refreshToken = getCookie(req, Env.REFRESH_TOKEN_COOKIE_NAME);
+            if (!refreshToken) {
+                throw new AppError(
+                    HttpStatus.UNAUTHORIZED,
+                    "Missing refresh token"
+                );
+            }
+
+            const result = await this.authService.refreshSession(
+                refreshToken,
+                getSessionMetadata(req)
+            );
+            setAuthCookies(res, {
+                accessToken: result.accessToken,
+                refreshToken: result.refreshToken,
+            });
+            const resObj = ResponseDto.success(
+                HttpStatus.OK,
+                SuccessMessages.TOKEN_REFRESHED,
+                {
+                    user: result.user,
+                    accessToken: result.accessToken,
+                    tokenType: "Bearer",
+                    expiresIn: Env.JWT_EXPIRES_IN,
+                }
             );
             return res.status(HttpStatus.OK).json(resObj);
         } catch (error) {

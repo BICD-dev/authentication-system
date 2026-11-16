@@ -12,15 +12,18 @@ import { EventsService } from "../events/events.service";
 import { VerifyEmailOtpDto } from "./dto/verifyEmailOtp.dto";
 import { CacheFactory, CacheStore } from "../cache";
 import { Env } from "../config/env";
+import { SessionMetadata, SessionService } from "../session/session.service";
+import type { User } from "../generated/prisma/client";
 // move this to an interface folder
-interface loginResponse {
+interface AuthSessionResult {
     user: {
         id: string,
         first_name: string | null,
         last_name: string | null,
         email: string | null,
     },
-    token: string
+    accessToken: string,
+    refreshToken: string,
 }
 
 export class AuthenticationService implements IAuthService {
@@ -30,12 +33,14 @@ export class AuthenticationService implements IAuthService {
     private readonly jwtService: JwtService
     private readonly eventsService: EventsService
     private readonly redisCacheStore: CacheStore
+    private readonly sessionService: SessionService
     constructor() {
         this.userRepository = new UserRepository()
         this.bcryptService = new BcryptService()
-        this.jwtService = new JwtService(Env.JWT_SECRET) 
+        this.jwtService = new JwtService(Env.JWT_SECRET, Env.JWT_EXPIRES_IN)
         this.eventsService = new EventsService()
         this.redisCacheStore = CacheFactory.createCacheStore()
+        this.sessionService = new SessionService()
     }
 
     async createAccountWithEmailPassword(data: CreateAccountDto): Promise<any> {
@@ -72,7 +77,7 @@ export class AuthenticationService implements IAuthService {
         return user;
 
     }
-    async loginWithPassword(data: LoginWithPasswordDto): Promise<loginResponse> {
+    async loginWithPassword(data: LoginWithPasswordDto, metadata?: SessionMetadata): Promise<AuthSessionResult> {
         const validate = await validateDto(LoginWithPasswordDto, data);
         const { email, password } = validate;
         // check that user's email or phone exists
@@ -101,11 +106,8 @@ export class AuthenticationService implements IAuthService {
             throw new AppError(403, "User's account not activated, verify your email to activate your account")
         }
 
-        // generate token
-        const token = this.jwtService.generateToken({
-            id: userExists.id,
-            role: "user" // add role to db later
-        })
+        // issue an access token and a refresh-token session
+        const session = await this.createSessionForUser(userExists, metadata)
         // update user's last login and emit event to trigger the sending of the login notification email
         // await this.userRepository.updateLastLogin(userExists.id);
         if (userExists.email) {
@@ -114,15 +116,23 @@ export class AuthenticationService implements IAuthService {
                 firstName: userExists.firstName,
             })
         }
-        return {
-            user: {
-                id: userExists.id,
-                first_name: userExists.firstName,
-                last_name: userExists.lastName,
-                email: userExists.email,
-            },
-            token
+        // ill specify the specific details to return later, for now im doing it in the controller...
+        return session
+    }
 
+    async refreshSession(rawRefreshToken: string, metadata?: SessionMetadata): Promise<AuthSessionResult> {
+        const rotated = await this.sessionService.rotateSession(rawRefreshToken, metadata)
+        const user = await this.userRepository.findById(rotated.session.userId)
+
+        if (!user || user.deletedAt || user.status !== "ACTIVE") {
+            await this.sessionService.revokeAllSessionsForUser(rotated.session.userId)
+            throw new AppError(401, "This account is not active")
+        }
+
+        return {
+            user: this.toAuthUser(user),
+            accessToken: this.generateAccessToken(user),
+            refreshToken: rotated.refreshToken,
         }
     }
 
@@ -182,5 +192,32 @@ export class AuthenticationService implements IAuthService {
         });
 
         return;
+    }
+
+    private async createSessionForUser(user: User, metadata?: SessionMetadata): Promise<AuthSessionResult> {
+        const { refreshToken } = await this.sessionService.createSession(user.id, metadata)
+
+        return {
+            user: this.toAuthUser(user),
+            accessToken: this.generateAccessToken(user),
+            refreshToken,
+        }
+    }
+
+    private generateAccessToken(user: User): string {
+        return this.jwtService.generateToken({
+            id: user.id,
+            email: user.email,
+            role: "user" // add role to db later
+        })
+    }
+
+    private toAuthUser(user: User): AuthSessionResult["user"] {
+        return {
+            id: user.id,
+            first_name: user.firstName,
+            last_name: user.lastName,
+            email: user.email,
+        }
     }
 }
