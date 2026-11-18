@@ -16,7 +16,7 @@ export class UserRepository implements IRepository<User, { email?: string; first
             const db = tx ?? prisma;
             const user = await db.user.create({
                 data: {
-                    email: data.email,
+                    email: data.email ? data.email.trim().toLowerCase() : undefined,
                     firstName: data.firstName,
                     lastName: data.lastName,
                     password: data.password
@@ -48,7 +48,7 @@ export class UserRepository implements IRepository<User, { email?: string; first
         try {
             const db = tx ?? prisma;
             const user = await db.user.findUnique({
-                where: { email },
+                where: { email: email.trim().toLowerCase() },
             })
             resolve(user)
         } catch (error) {
@@ -64,7 +64,9 @@ export class UserRepository implements IRepository<User, { email?: string; first
             const db = tx ?? prisma;
             const user = await db.user.update({
                 where: { id },
-                data,
+                data: typeof data.email === "string"
+                    ? { ...data, email: data.email.trim().toLowerCase() }
+                    : data,
             });
             resolve(user);
         } catch (error) {

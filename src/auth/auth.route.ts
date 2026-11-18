@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { AuthController } from "./auth.controller";
+import { authenticate } from "../utils/middleware/auth.middleware";
 const router = Router();
 const authenticationController = new AuthController()
 
@@ -7,6 +8,8 @@ const authenticationController = new AuthController()
 router.post("/signup",authenticationController.createAccountWithEmailPassword  )
 router.post("/login",authenticationController.loginWithPassword)
 router.post("/refresh",authenticationController.refreshSession)
+router.get("/profile",authenticate,authenticationController.getProfile)
+router.post("/logout",authenticationController.logout)
 router.post("/otp/verify",authenticationController.verifyEmailOtp)
 router.post("/otp/resend",authenticationController.resendEmailOtp)
 // username and password

@@ -1,4 +1,6 @@
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
+import { HttpStatus } from '../../constant/http-status.enum';
+import { AppError } from '../middleware/errorHandler';
 import { parseDurationToMs } from '../time';
 
 export class JwtService {
@@ -25,7 +27,10 @@ export class JwtService {
             const decoded = jwt.verify(token, this.secretKey) as JwtPayload;
             return decoded;
         } catch (error) {
-            throw new Error('Invalid token');
+            throw new AppError(
+                HttpStatus.UNAUTHORIZED,
+                'Invalid or expired access token'
+            );
         }
     }
 

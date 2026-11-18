@@ -5,7 +5,7 @@ import { HttpStatus } from "../constant/http-status.enum";
 import { SuccessMessages } from "../constant/success-messages.enum";
 import { AppError } from "../utils/middleware/errorHandler";
 import { Env } from "../config/env";
-import { getCookie, setAuthCookies } from "../utils/cookies";
+import { clearAuthCookies, getCookie, setAuthCookies } from "../utils/cookies";
 import { SessionMetadata } from "../session/session.service";
 
 function getSessionMetadata(req: Request): SessionMetadata {
@@ -91,6 +91,43 @@ export class AuthController {
                     tokenType: "Bearer",
                     expiresIn: Env.JWT_EXPIRES_IN,
                 }
+            );
+            return res.status(HttpStatus.OK).json(resObj);
+        } catch (error) {
+            next(error)
+        }
+    }
+
+    getProfile:RequestHandler = async (req:Request, res:Response, next:NextFunction)=>{
+        try {
+            const authenticatedUser = req.user;
+            if (!authenticatedUser) {
+                throw new AppError(HttpStatus.UNAUTHORIZED, "Unauthorized");
+            }
+
+            const result = await this.authService.getProfile(authenticatedUser.id);
+            const resObj = ResponseDto.success(
+                HttpStatus.OK,
+                SuccessMessages.PROFILE_FETCHED,
+                result
+            );
+            return res.status(HttpStatus.OK).json(resObj);
+        } catch (error) {
+            next(error)
+        }
+    }
+
+    logout:RequestHandler = async (req:Request, res:Response, next:NextFunction)=>{
+        try {
+            const refreshToken = getCookie(req, Env.REFRESH_TOKEN_COOKIE_NAME);
+            if (refreshToken) {
+                await this.authService.logout(refreshToken);
+            }
+
+            clearAuthCookies(res);
+            const resObj = ResponseDto.success(
+                HttpStatus.OK,
+                SuccessMessages.LOGOUT_SUCCESSFUL
             );
             return res.status(HttpStatus.OK).json(resObj);
         } catch (error) {

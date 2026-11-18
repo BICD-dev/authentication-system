@@ -13,15 +13,11 @@ import { VerifyEmailOtpDto } from "./dto/verifyEmailOtp.dto";
 import { CacheFactory, CacheStore } from "../cache";
 import { Env } from "../config/env";
 import { SessionMetadata, SessionService } from "../session/session.service";
-import type { User } from "../generated/prisma/client";
+import { UserStatus, type User } from "../generated/prisma/client";
+import { toUserResponse, UserResponse } from "../dtos/user-response.dto";
 // move this to an interface folder
 interface AuthSessionResult {
-    user: {
-        id: string,
-        first_name: string | null,
-        last_name: string | null,
-        email: string | null,
-    },
+    user: UserResponse,
     accessToken: string,
     refreshToken: string,
 }
@@ -74,7 +70,7 @@ export class AuthenticationService implements IAuthService {
             });
         }
 
-        return user;
+        return toUserResponse(user);
 
     }
     async loginWithPassword(data: LoginWithPasswordDto, metadata?: SessionMetadata): Promise<AuthSessionResult> {
@@ -124,16 +120,34 @@ export class AuthenticationService implements IAuthService {
         const rotated = await this.sessionService.rotateSession(rawRefreshToken, metadata)
         const user = await this.userRepository.findById(rotated.session.userId)
 
-        if (!user || user.deletedAt || user.status !== "ACTIVE") {
+        if (!user || user.deletedAt || user.status !== UserStatus.ACTIVE) {
             await this.sessionService.revokeAllSessionsForUser(rotated.session.userId)
             throw new AppError(401, "This account is not active")
         }
 
         return {
-            user: this.toAuthUser(user),
+            user: toUserResponse(user),
             accessToken: this.generateAccessToken(user),
             refreshToken: rotated.refreshToken,
         }
+    }
+
+    async getProfile(userId: string): Promise<UserResponse> {
+        const user = await this.userRepository.findById(userId);
+
+        if (!user || user.deletedAt) {
+            throw new AppError(401, "User not found");
+        }
+
+        if (user.status !== UserStatus.ACTIVE) {
+            throw new AppError(403, "This account is not active");
+        }
+
+        return toUserResponse(user);
+    }
+
+    async logout(rawRefreshToken: string): Promise<void> {
+        await this.sessionService.revokeSession(rawRefreshToken);
     }
 
     async verifyEmailOtp(data: VerifyEmailOtpDto): Promise<any> {
@@ -198,7 +212,7 @@ export class AuthenticationService implements IAuthService {
         const { refreshToken } = await this.sessionService.createSession(user.id, metadata)
 
         return {
-            user: this.toAuthUser(user),
+            user: toUserResponse(user),
             accessToken: this.generateAccessToken(user),
             refreshToken,
         }
@@ -210,14 +224,5 @@ export class AuthenticationService implements IAuthService {
             email: user.email,
             role: "user" // add role to db later
         })
-    }
-
-    private toAuthUser(user: User): AuthSessionResult["user"] {
-        return {
-            id: user.id,
-            first_name: user.firstName,
-            last_name: user.lastName,
-            email: user.email,
-        }
     }
 }

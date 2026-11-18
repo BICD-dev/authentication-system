@@ -19,6 +19,8 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 - User registration and login with email + password
 - JWT-based authentication with configurable lifetime
 - Refresh-token sessions with rotation and reuse detection
+- Profile endpoint with cookie or Bearer authentication
+- Logout with refresh-session revocation
 - Email verification with OTP
 - Secure password hashing with bcrypt
 - Input validation and structured error handling
@@ -27,7 +29,6 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 
 ### In progress / planned
 
-- Profile and logout endpoints
 - Password reset
 - OAuth 2.0 (Google, GitHub, Microsoft, Apple)
 - Role-based access control (RBAC)
@@ -175,6 +176,24 @@ refresh token.
 - The login and refresh responses include `accessToken`, `tokenType`, `expiresIn`,
   and a safe user summary. The refresh token is only sent as a cookie.
 
+### Protected routes
+
+`GET /api/auth/profile` requires an access token from either:
+
+- the `access_token` httpOnly cookie, or
+- `Authorization: Bearer <accessToken>`.
+
+The middleware verifies the JWT and attaches the authenticated user to
+`req.user`. Account-state checks (missing, deleted, or inactive users) belong to
+the application layer; the profile service rejects those accounts.
+
+`POST /api/auth/logout` is idempotent: if a refresh-token cookie is present, the
+matching session is revoked; both auth cookies are always cleared.
+
+All user responses use a safe mapper that excludes the password hash and
+internal fields. Emails are trimmed and lowercased before storage and lookup, so
+login and OTP flows are case-insensitive.
+
 ## 📡 API Endpoints
 
 ### Implemented
@@ -184,6 +203,8 @@ refresh token.
 | POST   | `/api/auth/signup`          | Register a new user                 |
 | POST   | `/api/auth/login`           | Login user and start a session      |
 | POST   | `/api/auth/refresh`         | Rotate the refresh token            |
+| GET    | `/api/auth/profile`         | Get the authenticated user          |
+| POST   | `/api/auth/logout`          | Revoke the session and clear cookies |
 | POST   | `/api/auth/otp/verify`      | Verify the email OTP                |
 | POST   | `/api/auth/otp/resend`      | Resend the email verification OTP   |
 
@@ -191,8 +212,6 @@ refresh token.
 
 | Method | Endpoint                      | Description                     |
 | ------ | ----------------------------- | ------------------------------- |
-| GET    | `/api/auth/profile`           | Get the authenticated user      |
-| POST   | `/api/auth/logout`            | Logout and revoke the session   |
 | POST   | `/api/auth/password/forgot`   | Request a password reset        |
 | POST   | `/api/auth/password/reset`    | Complete a password reset       |
 
@@ -204,6 +223,10 @@ refresh token.
   on logout or reuse detection
 - Auth cookies are `httpOnly` and their `sameSite`/`secure` flags are
   configurable
+- Protected routes accept a cookie or Bearer token; account-state checks are
+  enforced in the application layer
+- User responses never include password hashes
+- Emails are normalized before storage and lookup
 - Sensitive data stored in environment variables
 - Input validation to prevent injection attacks
 - Proper HTTP status codes and error handling

@@ -8,4 +8,6 @@ export interface IAuthService {
     verifyEmailOtp(data:VerifyEmailOtpDto):Promise<any>
     loginWithPassword(data:LoginWithPasswordDto):Promise<any>
     refreshSession(rawRefreshToken:string):Promise<any>
+    getProfile(userId:string):Promise<any>
+    logout(rawRefreshToken:string):Promise<void>
 }

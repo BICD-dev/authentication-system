@@ -1,36 +1,45 @@
 import type { NextFunction, Request, Response } from "express";
 import { Env } from "../../config/env";
+import { HttpStatus } from "../../constant/http-status.enum";
+import { getCookie } from "../cookies";
 import { JwtService } from "../jwt/jwt.service";
 import { AppError } from "./errorHandler";
 
-export type AuthenticatedRequest = Request & {
-  user?: {
-    id: string;
-    email?: string | null;
-    role?: string;
-  };
-};
+function extractAccessToken(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const match = /^Bearer\s+(.+)$/i.exec(authHeader);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return getCookie(req, Env.ACCESS_TOKEN_COOKIE_NAME);
+}
 
 export const authenticate = async (
-  req: AuthenticatedRequest,
+  req: Request,
   _res: Response,
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith("Bearer ")
-      ? authHeader.split(" ")[1]
-      : null;
+    const token = extractAccessToken(req);
 
     if (!token) {
-      throw new AppError(401, "Unauthorized: missing bearer token");
+      throw new AppError(
+        HttpStatus.UNAUTHORIZED,
+        "Unauthorized: missing access token"
+      );
     }
 
     const jwtService = new JwtService(Env.JWT_SECRET, Env.JWT_EXPIRES_IN);
     const payload = await jwtService.verifyToken(token);
 
     if (!payload || typeof payload !== "object" || !payload.id) {
-      throw new AppError(401, "Unauthorized: invalid token payload");
+      throw new AppError(
+        HttpStatus.UNAUTHORIZED,
+        "Unauthorized: invalid token payload"
+      );
     }
 
     req.user = {
@@ -41,6 +50,6 @@ export const authenticate = async (
 
     next();
   } catch (error) {
-    next(error instanceof Error ? error : new AppError(401, "Unauthorized"));
+    next(error);
   }
 };
