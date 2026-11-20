@@ -135,6 +135,32 @@ export class AuthController {
         }
     }
 
+    forgotPassword:RequestHandler = async (req:Request, res:Response, next:NextFunction)=>{
+        try {
+            await this.authService.requestPasswordReset(req.body);
+            const resObj = ResponseDto.success(
+                HttpStatus.OK,
+                SuccessMessages.PASSWORD_RESET_REQUESTED
+            );
+            return res.status(HttpStatus.OK).json(resObj);
+        } catch (error) {
+            next(error)
+        }
+    }
+
+    resetPassword:RequestHandler = async (req:Request, res:Response, next:NextFunction)=>{
+        try {
+            await this.authService.resetPassword(req.body);
+            const resObj = ResponseDto.success(
+                HttpStatus.OK,
+                SuccessMessages.PASSWORD_RESET_SUCCESSFUL
+            );
+            return res.status(HttpStatus.OK).json(resObj);
+        } catch (error) {
+            next(error)
+        }
+    }
+
     verifyEmailOtp:RequestHandler = async (req:Request, res:Response, next:NextFunction)=>{
         try {
             const data = req.body;

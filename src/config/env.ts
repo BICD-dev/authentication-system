@@ -65,6 +65,12 @@ export class Env {
 		60
 	);
 
+	// Password reset
+	static readonly PASSWORD_RESET_TOKEN_TTL_MINUTES = Env.optionalNumber(
+		"PASSWORD_RESET_TOKEN_TTL_MINUTES",
+		30
+	);
+
 	// Optional Brevo SMTP settings (present in .env.example)
 	static readonly BREVO_SMTP_HOST = Env.optionalString(
 		"BREVO_SMTP_HOST",

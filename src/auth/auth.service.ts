@@ -1,10 +1,13 @@
+import { createHash, randomBytes } from "crypto";
 import { UserRepository } from "../repositories/user.repository";
 import { BcryptService } from "../utils/bcrypt/bcrypt.service";
 import { JwtService } from "../utils/jwt/jwt.service";
 import { AppError } from "../utils/middleware/errorHandler";
 import { validateDto } from "../utils/validate.dto";
 import { CreateAccountDto } from "./dto/createAccount.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginWithPasswordDto } from "./dto/loginWithPassword.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { IAuthService } from "./interface/auth.service.interface";
 import { prisma } from "../lib/prisma";
 import "dotenv/config"
@@ -13,7 +16,7 @@ import { VerifyEmailOtpDto } from "./dto/verifyEmailOtp.dto";
 import { CacheFactory, CacheStore } from "../cache";
 import { Env } from "../config/env";
 import { SessionMetadata, SessionService } from "../session/session.service";
-import { UserStatus, type User } from "../generated/prisma/client";
+import { MagicLinkType, UserStatus, type User } from "../generated/prisma/client";
 import { toUserResponse, UserResponse } from "../dtos/user-response.dto";
 // move this to an interface folder
 interface AuthSessionResult {
@@ -150,6 +153,126 @@ export class AuthenticationService implements IAuthService {
         await this.sessionService.revokeSession(rawRefreshToken);
     }
 
+    async requestPasswordReset(data: ForgotPasswordDto): Promise<void> {
+        const {email} = await validateDto(ForgotPasswordDto, data);
+        const user = await this.userRepository.findByEmail(email);
+
+        if (!user || user.deletedAt || !user.email) {
+            return;
+        }
+        // create token and hash it
+        const token = this.generateResetToken();
+        const tokenHash = this.hashResetToken(token);
+        const expiresAt = new Date(
+            Date.now() + Env.PASSWORD_RESET_TOKEN_TTL_MINUTES * 60_000
+        );
+
+        await prisma.$transaction([
+            // Only the most recent reset link should remain usable.
+            prisma.magicLink.updateMany({
+                where: {
+                    userId: user.id,
+                    type: MagicLinkType.PASSWORD_RESET,
+                    usedAt: null,
+                },
+                data: { usedAt: new Date() },
+            }),
+            prisma.magicLink.create({
+                data: {
+                    userId: user.id,
+                    email: user.email,
+                    tokenHash,
+                    type: MagicLinkType.PASSWORD_RESET,
+                    expiresAt,
+                },
+            }),
+        ]);
+
+        this.eventsService.emitSendPasswordResetEmail({
+            email: user.email,
+            firstName: user.firstName,
+            token,
+        });
+    }
+
+    async resetPassword(data: ResetPasswordDto): Promise<void> {
+        const validate = await validateDto(ResetPasswordDto, data);
+        const tokenHash = this.hashResetToken(validate.token);
+        const resetLink = await prisma.magicLink.findFirst({
+            where: {
+                tokenHash,
+                type: MagicLinkType.PASSWORD_RESET,
+            },
+        });
+
+        if (
+            !resetLink ||
+            resetLink.usedAt ||
+            resetLink.expiresAt.getTime() <= Date.now()
+        ) {
+            throw new AppError(400, "Invalid or expired password reset token");
+        }
+
+        const user = resetLink.userId
+            ? await this.userRepository.findById(resetLink.userId)
+            : await this.userRepository.findByEmail(resetLink.email);
+
+        if (!user || user.deletedAt || !user.email) {
+            throw new AppError(400, "Invalid or expired password reset token");
+        }
+
+        // A link issued to an old email address must stop working after the
+        // account email changes.
+        if (user.email.trim().toLowerCase() !== resetLink.email.trim().toLowerCase()) {
+            throw new AppError(400, "Invalid or expired password reset token");
+        }
+
+        const hashedPassword = await this.bcryptService.hashPassword(
+            validate.newPassword
+        );
+
+        await prisma.$transaction(async (tx) => {
+            // Compare-and-set the link so concurrent requests cannot both reset
+            // the password with the same token.
+            const consumed = await tx.magicLink.updateMany({
+                where: { id: resetLink.id, usedAt: null },
+                data: { usedAt: new Date() },
+            });
+
+            if (consumed.count === 0) {
+                throw new AppError(400, "Invalid or expired password reset token");
+            }
+
+            // Invalidate any other outstanding reset links for this account.
+            await tx.magicLink.updateMany({
+                where: {
+                    userId: user.id,
+                    type: MagicLinkType.PASSWORD_RESET,
+                    usedAt: null,
+                },
+                data: { usedAt: new Date() },
+            });
+
+            await this.userRepository.update(
+                user.id,
+                {
+                    password: hashedPassword,
+                    passwordChangedAt: new Date(),
+                },
+                tx
+            );
+        });
+
+        await this.sessionService.revokeAllSessionsForUser(user.id);
+
+        if (user.email) {
+            this.eventsService.emitPasswordChanged({
+                email: user.email,
+                firstName: user.firstName,
+            });
+        }
+    }
+
     async verifyEmailOtp(data: VerifyEmailOtpDto): Promise<any> {
         // validate input data
         const validate = await validateDto(VerifyEmailOtpDto, data);
@@ -224,5 +347,13 @@ export class AuthenticationService implements IAuthService {
             email: user.email,
             role: "user" // add role to db later
         })
+    }
+
+    private generateResetToken(): string {
+        return randomBytes(32).toString("base64url");
+    }
+
+    private hashResetToken(token: string): string {
+        return createHash("sha256").update(token).digest("hex");
     }
 }

@@ -21,6 +21,7 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 - Refresh-token sessions with rotation and reuse detection
 - Profile endpoint with cookie or Bearer authentication
 - Logout with refresh-session revocation
+- Forgot/reset password with single-use email links
 - Email verification with OTP
 - Secure password hashing with bcrypt
 - Input validation and structured error handling
@@ -29,7 +30,6 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 
 ### In progress / planned
 
-- Password reset
 - OAuth 2.0 (Google, GitHub, Microsoft, Apple)
 - Role-based access control (RBAC)
 - API key authentication
@@ -194,6 +194,26 @@ All user responses use a safe mapper that excludes the password hash and
 internal fields. Emails are trimmed and lowercased before storage and lookup, so
 login and OTP flows are case-insensitive.
 
+### Password reset
+
+`POST /api/auth/password/forgot` accepts an `email` and always returns the same
+generic success response, whether or not an account exists. This prevents the
+endpoint from being used to enumerate users.
+
+When the email belongs to an account:
+
+- a random 32-byte token is generated;
+- only its SHA-256 hash is stored in the `MagicLink` table with
+  `type = PASSWORD_RESET`;
+- the link expires after `PASSWORD_RESET_TOKEN_TTL_MINUTES` (default `30`);
+- any previous unused reset links for that account are invalidated;
+- an email is sent to `${FRONTEND_URL}/reset-password?token=...`.
+
+`POST /api/auth/password/reset` accepts `token` and `newPassword`. It rejects
+missing, used, or expired tokens, consumes the token, updates the password and
+`passwordChangedAt`, revokes every active session for that user, and sends a
+"password changed" notification email.
+
 ## 📡 API Endpoints
 
 ### Implemented
@@ -205,15 +225,16 @@ login and OTP flows are case-insensitive.
 | POST   | `/api/auth/refresh`         | Rotate the refresh token            |
 | GET    | `/api/auth/profile`         | Get the authenticated user          |
 | POST   | `/api/auth/logout`          | Revoke the session and clear cookies |
+| POST   | `/api/auth/password/forgot` | Request a password reset link       |
+| POST   | `/api/auth/password/reset`  | Complete a password reset           |
 | POST   | `/api/auth/otp/verify`      | Verify the email OTP                |
 | POST   | `/api/auth/otp/resend`      | Resend the email verification OTP   |
 
 ### Planned
 
-| Method | Endpoint                      | Description                     |
-| ------ | ----------------------------- | ------------------------------- |
-| POST   | `/api/auth/password/forgot`   | Request a password reset        |
-| POST   | `/api/auth/password/reset`    | Complete a password reset       |
+| Method | Endpoint                | Description                                      |
+| ------ | ----------------------- | ------------------------------------------------ |
+| GET    | `/api/auth/csrf`        | Issue a CSRF token for cookie-based clients      |
 
 ## 🔒 Security Considerations
 
@@ -226,6 +247,9 @@ login and OTP flows are case-insensitive.
 - Protected routes accept a cookie or Bearer token; account-state checks are
   enforced in the application layer
 - User responses never include password hashes
+- Password-reset tokens are hashed at rest, single-use, and time-limited; a
+  successful reset revokes all sessions
+- Forgot-password responses do not reveal whether an email is registered
 - Emails are normalized before storage and lookup
 - Sensitive data stored in environment variables
 - Input validation to prevent injection attacks
@@ -235,7 +259,7 @@ login and OTP flows are case-insensitive.
 
 - Add OAuth providers (Google, GitHub)
 - Implement MFA (2FA with OTP)
-- Rate limiting and brute-force protection
+- Extend rate limiting and brute-force protection to every auth endpoint
 - Audit logging
 - API documentation with Swagger
 
