@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { UserRepository } from "../repositories/user.repository";
+import { MagicLinkRepository } from "../repositories/magic-link.repository";
 import { BcryptService } from "../utils/bcrypt/bcrypt.service";
 import { JwtService } from "../utils/jwt/jwt.service";
 import { AppError } from "../utils/middleware/errorHandler";
@@ -28,6 +29,7 @@ interface AuthSessionResult {
 export class AuthenticationService implements IAuthService {
 
     private readonly userRepository: UserRepository
+    private readonly magicLinkRepository: MagicLinkRepository
     private readonly bcryptService: BcryptService
     private readonly jwtService: JwtService
     private readonly eventsService: EventsService
@@ -35,6 +37,7 @@ export class AuthenticationService implements IAuthService {
     private readonly sessionService: SessionService
     constructor() {
         this.userRepository = new UserRepository()
+        this.magicLinkRepository = new MagicLinkRepository()
         this.bcryptService = new BcryptService()
         this.jwtService = new JwtService(Env.JWT_SECRET, Env.JWT_EXPIRES_IN)
         this.eventsService = new EventsService()
@@ -167,26 +170,13 @@ export class AuthenticationService implements IAuthService {
             Date.now() + Env.PASSWORD_RESET_TOKEN_TTL_MINUTES * 60_000
         );
 
-        await prisma.$transaction([
-            // Only the most recent reset link should remain usable.
-            prisma.magicLink.updateMany({
-                where: {
-                    userId: user.id,
-                    type: MagicLinkType.PASSWORD_RESET,
-                    usedAt: null,
-                },
-                data: { usedAt: new Date() },
-            }),
-            prisma.magicLink.create({
-                data: {
-                    userId: user.id,
-                    email: user.email,
-                    tokenHash,
-                    type: MagicLinkType.PASSWORD_RESET,
-                    expiresAt,
-                },
-            }),
-        ]);
+        await this.magicLinkRepository.createReplacingActive({
+            userId: user.id,
+            email: user.email,
+            tokenHash,
+            type: MagicLinkType.PASSWORD_RESET,
+            expiresAt,
+        });
 
         this.eventsService.emitSendPasswordResetEmail({
             email: user.email,
@@ -198,12 +188,10 @@ export class AuthenticationService implements IAuthService {
     async resetPassword(data: ResetPasswordDto): Promise<void> {
         const validate = await validateDto(ResetPasswordDto, data);
         const tokenHash = this.hashResetToken(validate.token);
-        const resetLink = await prisma.magicLink.findFirst({
-            where: {
-                tokenHash,
-                type: MagicLinkType.PASSWORD_RESET,
-            },
-        });
+        const resetLink = await this.magicLinkRepository.findByTokenHash(
+            tokenHash,
+            MagicLinkType.PASSWORD_RESET
+        );
 
         if (
             !resetLink ||
@@ -234,24 +222,21 @@ export class AuthenticationService implements IAuthService {
         await prisma.$transaction(async (tx) => {
             // Compare-and-set the link so concurrent requests cannot both reset
             // the password with the same token.
-            const consumed = await tx.magicLink.updateMany({
-                where: { id: resetLink.id, usedAt: null },
-                data: { usedAt: new Date() },
-            });
+            const consumed = await this.magicLinkRepository.consume(
+                resetLink.id,
+                tx
+            );
 
-            if (consumed.count === 0) {
+            if (!consumed) {
                 throw new AppError(400, "Invalid or expired password reset token");
             }
 
             // Invalidate any other outstanding reset links for this account.
-            await tx.magicLink.updateMany({
-                where: {
-                    userId: user.id,
-                    type: MagicLinkType.PASSWORD_RESET,
-                    usedAt: null,
-                },
-                data: { usedAt: new Date() },
-            });
+            await this.magicLinkRepository.invalidateActiveForUser(
+                user.id,
+                MagicLinkType.PASSWORD_RESET,
+                tx
+            );
 
             await this.userRepository.update(
                 user.id,

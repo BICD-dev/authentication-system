@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { Env } from "../config/env";
 import type { Prisma, Session } from "../generated/prisma/client";
-import { prisma } from "../lib/prisma";
+import { SessionRepository } from "../repositories/session.repository";
 import { AppError } from "../utils/middleware/errorHandler";
 import { parseDurationToMs } from "../utils/time";
 
@@ -16,6 +16,13 @@ export interface IssuedSession {
 }
 
 export class SessionService {
+
+	private readonly sessionRepository: SessionRepository;
+
+	constructor() {
+		this.sessionRepository = new SessionRepository();
+	}
+
 	/**
 	 * Create a new refresh-token session. Only the SHA-256 hash of the token is
 	 * persisted; the raw token is returned to the caller exactly once.
@@ -26,13 +33,11 @@ export class SessionService {
 	): Promise<IssuedSession> {
 		const refreshToken = this.generateRefreshToken();
 
-		const session = await prisma.session.create({
-			data: {
-				userId,
-				tokenHash: this.hashToken(refreshToken),
-				expiresAt: this.getRefreshTokenExpiry(),
-				metadata: this.serializeMetadata(metadata),
-			},
+		const session = await this.sessionRepository.create({
+			userId,
+			tokenHash: this.hashToken(refreshToken),
+			expiresAt: this.getRefreshTokenExpiry(),
+			metadata: this.serializeMetadata(metadata),
 		});
 
 		return { refreshToken, session };
@@ -48,7 +53,7 @@ export class SessionService {
 		metadata?: SessionMetadata
 	): Promise<IssuedSession> {
 		const tokenHash = this.hashToken(rawRefreshToken);
-		const session = await prisma.session.findFirst({ where: { tokenHash } });
+		const session = await this.sessionRepository.findByTokenHash(tokenHash);
 
 		if (!session) {
 			throw new AppError(401, "Invalid refresh token");
@@ -63,21 +68,15 @@ export class SessionService {
 		}
 
 		if (session.expiresAt.getTime() <= Date.now()) {
-			await prisma.session.updateMany({
-				where: { id: session.id, revokedAt: null },
-				data: { revokedAt: new Date() },
-			});
+			await this.sessionRepository.revoke(session.id);
 			throw new AppError(401, "Refresh token expired. Please sign in again.");
 		}
 
 		// Guard against two concurrent refreshes using the same token. Only one
 		// request can transition the session from active to revoked.
-		const revoked = await prisma.session.updateMany({
-			where: { id: session.id, revokedAt: null },
-			data: { revokedAt: new Date() },
-		});
+		const revoked = await this.sessionRepository.revoke(session.id);
 
-		if (revoked.count === 0) {
+		if (!revoked) {
 			await this.revokeAllSessionsForUser(session.userId);
 			throw new AppError(
 				401,
@@ -86,44 +85,30 @@ export class SessionService {
 		}
 
 		const refreshToken = this.generateRefreshToken();
-		const newSession = await prisma.session.create({
-			data: {
-				userId: session.userId,
-				tokenHash: this.hashToken(refreshToken),
-				expiresAt: this.getRefreshTokenExpiry(),
-				metadata: this.serializeMetadata(metadata),
-			},
+		const newSession = await this.sessionRepository.create({
+			userId: session.userId,
+			tokenHash: this.hashToken(refreshToken),
+			expiresAt: this.getRefreshTokenExpiry(),
+			metadata: this.serializeMetadata(metadata),
 		});
 
 		return { refreshToken, session: newSession };
 	}
 
 	async revokeSession(rawRefreshToken: string): Promise<boolean> {
-		const result = await prisma.session.updateMany({
-			where: { tokenHash: this.hashToken(rawRefreshToken), revokedAt: null },
-			data: { revokedAt: new Date() },
-		});
-
-		return result.count > 0;
+		return this.sessionRepository.revokeByTokenHash(
+			this.hashToken(rawRefreshToken)
+		);
 	}
 
 	async revokeAllSessionsForUser(userId: string): Promise<number> {
-		const result = await prisma.session.updateMany({
-			where: { userId, revokedAt: null },
-			data: { revokedAt: new Date() },
-		});
-
-		return result.count;
+		return this.sessionRepository.revokeAllForUser(userId);
 	}
 
 	async findActiveSession(rawRefreshToken: string): Promise<Session | null> {
-		return prisma.session.findFirst({
-			where: {
-				tokenHash: this.hashToken(rawRefreshToken),
-				revokedAt: null,
-				expiresAt: { gt: new Date() },
-			},
-		});
+		return this.sessionRepository.findActiveByTokenHash(
+			this.hashToken(rawRefreshToken)
+		);
 	}
 
 	private generateRefreshToken(): string {
