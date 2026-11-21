@@ -5,6 +5,8 @@ import { rateLimiters } from "../utils/middleware/rateLimit.middleware";
 const router = Router();
 const authenticationController = new AuthController()
 
+router.get("/csrf", authenticationController.issueCsrfToken)
+
 // Email and password
 router.post("/signup",authenticationController.createAccountWithEmailPassword  )
 router.post("/login",authenticationController.loginWithPassword)

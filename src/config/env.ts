@@ -29,6 +29,14 @@ export class Env {
 		"CORS_ALLOWED_ORIGINS",
 		["http://localhost:3000", "http://localhost:5173"]
 	);
+	static readonly CORS_ALLOW_ALL_ORIGINS = Env.optionalBoolean(
+		"CORS_ALLOW_ALL_ORIGINS",
+		false
+	);
+	static readonly CORS_MAX_AGE_SECONDS = Env.optionalNumber(
+		"CORS_MAX_AGE_SECONDS",
+		600
+	);
 	static readonly FRONTEND_URL = Env.optionalString(
 		"FRONTEND_URL",
 		"http://localhost:3000"
@@ -48,11 +56,27 @@ export class Env {
 		["lax", "strict", "none"],
 		"lax"
 	);
-	static readonly COOKIE_SECURE = Env.optionalBoolean(
-		"COOKIE_SECURE",
-		Env.NODE_ENV === "production"
-	);
+	static readonly COOKIE_SECURE = (() => {
+		const secure = Env.optionalBoolean(
+			"COOKIE_SECURE",
+			Env.NODE_ENV === "production"
+		);
+		if (Env.COOKIE_SAMESITE === "none" && !secure) {
+			throw new Error("COOKIE_SECURE must be true when COOKIE_SAMESITE=none");
+		}
+		return secure;
+	})();
 	static readonly COOKIE_DOMAIN = Env.optionalString("COOKIE_DOMAIN", "");
+
+	// CSRF (double-submit cookie)
+	static readonly CSRF_COOKIE_NAME = Env.optionalString(
+		"CSRF_COOKIE_NAME",
+		"csrf_token"
+	);
+	static readonly CSRF_TOKEN_TTL_MINUTES = Env.optionalNumber(
+		"CSRF_TOKEN_TTL_MINUTES",
+		60
+	);
 
 	// OTP / rate limiting
 	static readonly OTP_PEPPER = Env.optionalString("OTP_PEPPER", "");

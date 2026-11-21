@@ -22,38 +22,9 @@ function baseCookieOptions(): CookieOptions {
 	return options;
 }
 
-export function parseCookies(header: string | undefined): Record<string, string> {
-	const cookies: Record<string, string> = {};
-
-	if (!header) {
-		return cookies;
-	}
-
-	for (const part of header.split(";")) {
-		const separatorIndex = part.indexOf("=");
-		if (separatorIndex === -1) {
-			continue;
-		}
-
-		const name = part.slice(0, separatorIndex).trim();
-		if (!name) {
-			continue;
-		}
-
-		const rawValue = part.slice(separatorIndex + 1).trim();
-		try {
-			cookies[name] = decodeURIComponent(rawValue);
-		} catch {
-			cookies[name] = rawValue;
-		}
-	}
-
-	return cookies;
-}
-
 export function getCookie(req: Request, name: string): string | null {
-	const cookies = parseCookies(req.headers.cookie);
-	return cookies[name] ?? null;
+	const value = req.cookies?.[name];
+	return typeof value === "string" ? value : null;
 }
 
 /**
@@ -79,4 +50,24 @@ export function clearAuthCookies(res: Response): void {
 
 	res.clearCookie(Env.ACCESS_TOKEN_COOKIE_NAME, options);
 	res.clearCookie(Env.REFRESH_TOKEN_COOKIE_NAME, options);
+}
+
+/**
+ * The CSRF token must be readable by browser JavaScript, so this cookie is
+ * deliberately not httpOnly. It uses the same site/secure policy as auth cookies.
+ */
+export function setCsrfCookie(res: Response, token: string): void {
+	const options: CookieOptions = {
+		httpOnly: false,
+		secure: Env.COOKIE_SECURE,
+		sameSite: Env.COOKIE_SAMESITE,
+		path: "/",
+		maxAge: Env.CSRF_TOKEN_TTL_MINUTES * 60_000,
+	};
+
+	if (Env.COOKIE_DOMAIN) {
+		options.domain = Env.COOKIE_DOMAIN;
+	}
+
+	res.cookie(Env.CSRF_COOKIE_NAME, token, options);
 }

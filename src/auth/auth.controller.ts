@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { Response , Request, NextFunction, RequestHandler } from "express";
 import { AuthenticationService } from "./auth.service";
 import { ResponseDto } from "../dtos/response.dto";
@@ -5,7 +6,7 @@ import { HttpStatus } from "../constant/http-status.enum";
 import { SuccessMessages } from "../constant/success-messages.enum";
 import { AppError } from "../utils/middleware/errorHandler";
 import { Env } from "../config/env";
-import { clearAuthCookies, getCookie, setAuthCookies } from "../utils/cookies";
+import { clearAuthCookies, getCookie, setAuthCookies, setCsrfCookie } from "../utils/cookies";
 import { SessionMetadata } from "../session/session.service";
 
 function getSessionMetadata(req: Request): SessionMetadata {
@@ -20,6 +21,21 @@ export class AuthController {
 
     constructor(){
         this.authService = new AuthenticationService()
+    }
+
+    issueCsrfToken:RequestHandler = (_req:Request, res:Response, next:NextFunction)=>{
+        try {
+            const token = randomBytes(32).toString("base64url");
+            setCsrfCookie(res, token);
+            const resObj = ResponseDto.success(
+                HttpStatus.OK,
+                SuccessMessages.CSRF_TOKEN_ISSUED,
+                { token }
+            );
+            return res.status(HttpStatus.OK).json(resObj);
+        } catch (error) {
+            next(error)
+        }
     }
 
     createAccountWithEmailPassword:RequestHandler =  async (req:Request,res:Response, next:NextFunction)=>{

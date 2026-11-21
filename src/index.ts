@@ -1,7 +1,10 @@
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import authRouter from "./auth/auth.route";
+import { corsOptions } from "./config/cors";
+import { csrfProtection } from "./utils/middleware/csrf.middleware";
 import {globalErrorHandler,notFoundHandler} from "./utils/middleware/errorHandler";
 import { registerEventHandlers } from "./events";
 import { Env } from "./config/env";
@@ -14,8 +17,10 @@ const PORT = Env.PORT;
 const redisClient = new RedisCache(Env.REDIS_URL);
 
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
+app.use(cookieParser());
 app.use(express.json());
+app.use(csrfProtection);
 
 app.use("/api/auth", authRouter);
 

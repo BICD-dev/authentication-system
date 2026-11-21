@@ -256,12 +256,37 @@ A limiter instance keeps one counter per client across every route it is
 attached to, so routes that need independent budgets should each create their
 own instance with `rateLimit(tier)`.
 
+### Browser clients: CORS, cookies, and CSRF
+
+For a browser frontend:
+
+1. Set `CORS_ALLOWED_ORIGINS` to the frontend origin(s). CORS runs with
+   `credentials: true`, allows `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and
+   `OPTIONS` plus the `Content-Type`, `Authorization`, and `X-CSRF-Token`
+   headers, and caches preflight results for `CORS_MAX_AGE_SECONDS` (default
+   `600`). Requests from other origins get a `403` JSON error. In development,
+   `CORS_ALLOW_ALL_ORIGINS=true` reflects any origin; it is ignored in
+   production.
+2. Call `GET /api/auth/csrf` before making unsafe cookie-authenticated requests.
+   It returns the token in the response envelope under `data.token` and sets a
+   readable (non-httpOnly) `csrf_token` cookie.
+3. Send that token in the `X-CSRF-Token` header on every unsafe request that
+   relies on auth cookies. The middleware compares it to the cookie with a
+   constant-time comparison. Safe methods (`GET`, `HEAD`, `OPTIONS`), requests
+   with `Authorization: Bearer`, and requests with no auth cookie are exempt.
+
+`cookie-parser` populates `req.cookies`; the access and refresh cookies remain
+`httpOnly`. `COOKIE_SAMESITE` defaults to `lax`; cross-site deployments should
+use `none` with `COOKIE_SECURE=true`. The server refuses to start when
+`COOKIE_SAMESITE=none` and `COOKIE_SECURE=false`.
+
 ## 📡 API Endpoints
 
 ### Implemented
 
 | Method | Endpoint                    | Description                         |
 | ------ | --------------------------- | ----------------------------------- |
+| GET    | `/api/auth/csrf`            | Issue a CSRF token for cookie clients |
 | POST   | `/api/auth/signup`          | Register a new user                 |
 | POST   | `/api/auth/login`           | Login user and start a session      |
 | POST   | `/api/auth/refresh`         | Rotate the refresh token            |
@@ -272,12 +297,6 @@ own instance with `rateLimit(tier)`.
 | POST   | `/api/auth/otp/verify`      | Verify the email OTP                |
 | POST   | `/api/auth/otp/resend`      | Resend the email verification OTP   |
 
-### Planned
-
-| Method | Endpoint                | Description                                      |
-| ------ | ----------------------- | ------------------------------------------------ |
-| GET    | `/api/auth/csrf`        | Issue a CSRF token for cookie-based clients      |
-
 ## 🔒 Security Considerations
 
 - Passwords are hashed using `bcrypt`
@@ -286,6 +305,8 @@ own instance with `rateLimit(tier)`.
   on logout or reuse detection
 - Auth cookies are `httpOnly` and their `sameSite`/`secure` flags are
   configurable
+- CORS uses an origin allowlist with credentials; CSRF uses double-submit
+  tokens with constant-time comparison for cookie-authenticated writes
 - Protected routes accept a cookie or Bearer token; account-state checks are
   enforced in the application layer
 - User responses never include password hashes
