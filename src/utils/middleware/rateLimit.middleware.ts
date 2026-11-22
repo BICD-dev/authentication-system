@@ -99,14 +99,20 @@ export const rateLimit = (
     rateLimitMiddleware({ ...RATE_LIMIT_PRESETS[tier], ...options });
 
 /**
- * Ready-to-use limiters. Each one has its own store namespace, so attaching a
- * named limiter to an endpoint gives that endpoint an independent budget that
- * is still shared across application instances.
+ * Ready-to-use limiters. Each named limiter has its own store namespace, so a
+ * burst on one endpoint does not consume another endpoint's budget. Counters
+ * are still shared across application instances via the cache provider.
  *
- * `strict` is kept as the shared limiter for the two password-reset routes.
+ * `strict` is the deliberately shared limiter for the two password-reset
+ * routes; both operations are the same abuse surface.
  */
 export const rateLimiters = {
-    strict: rateLimit("strict"),
-    moderate: rateLimit("moderate"),
-    lax: rateLimit("lax"),
-} satisfies Record<RateLimitTier, RateLimitRequestHandler>;
+    strict: rateLimit("strict", { storeName: "password-reset" }),
+    moderate: rateLimit("moderate", { storeName: "moderate" }),
+    lax: rateLimit("lax", { storeName: "lax" }),
+    signup: rateLimit("strict", { storeName: "signup" }),
+    login: rateLimit("strict", { storeName: "login" }),
+    refresh: rateLimit("moderate", { storeName: "refresh" }),
+    otpVerify: rateLimit("strict", { storeName: "otp-verify" }),
+    otpResend: rateLimit("moderate", { storeName: "otp-resend" }),
+} satisfies Record<string, RateLimitRequestHandler>;

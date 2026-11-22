@@ -9,11 +9,11 @@ const authenticationController = new AuthController()
 router.get("/csrf", authenticationController.issueCsrfToken)
 
 // Email and password
-router.post("/signup", rateLimiters.strict, authenticationController.createAccountWithEmailPassword)
-router.post("/login", rateLimiters.strict, authenticationController.loginWithPassword)
+router.post("/signup", rateLimiters.signup, authenticationController.createAccountWithEmailPassword)
+router.post("/login", rateLimiters.login, authenticationController.loginWithPassword)
 // These routes consume the refresh cookie directly, so they need the CSRF
 // check explicitly. `authenticate` already includes it for protected routes.
-router.post("/refresh", rateLimiters.moderate, csrfProtection, authenticationController.refreshSession)
+router.post("/refresh", rateLimiters.refresh, csrfProtection, authenticationController.refreshSession)
 router.get("/profile", authenticate, authenticationController.getProfile)
 router.post("/logout", csrfProtection, authenticationController.logout)
 router.post(
@@ -26,8 +26,8 @@ router.post(
     rateLimiters.strict,
     authenticationController.resetPassword
 )
-router.post("/otp/verify", rateLimiters.strict, authenticationController.verifyEmailOtp)
-router.post("/otp/resend", rateLimiters.strict, authenticationController.resendEmailOtp)
+router.post("/otp/verify", rateLimiters.otpVerify, authenticationController.verifyEmailOtp)
+router.post("/otp/resend", rateLimiters.otpResend, authenticationController.resendEmailOtp)
 // username and password
 
 
