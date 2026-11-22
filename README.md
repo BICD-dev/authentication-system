@@ -295,6 +295,12 @@ For a browser frontend:
    constant-time comparison. Safe methods (`GET`, `HEAD`, `OPTIONS`), requests
    with `Authorization: Bearer`, and requests with no auth cookie are exempt.
 
+`authenticate` runs the CSRF check for you on protected routes. `/refresh` and
+`/logout` consume the refresh cookie directly without `authenticate`, so they
+apply `csrfProtection` explicitly. Endpoints that neither use `authenticate`
+nor consume an existing auth cookie (signup, login, password reset, OTP) do not
+require a CSRF token.
+
 `cookie-parser` populates `req.cookies`; the access and refresh cookies remain
 `httpOnly`. `COOKIE_SAMESITE` defaults to `lax`; cross-site deployments should
 use `none` with `COOKIE_SECURE=true`. The server refuses to start when

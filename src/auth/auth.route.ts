@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { AuthController } from "./auth.controller";
 import { authenticate } from "../utils/middleware/auth.middleware";
+import { csrfProtection } from "../utils/middleware/csrf.middleware";
 import { rateLimiters } from "../utils/middleware/rateLimit.middleware";
 const router = Router();
 const authenticationController = new AuthController()
@@ -10,9 +11,11 @@ router.get("/csrf", authenticationController.issueCsrfToken)
 // Email and password
 router.post("/signup", rateLimiters.strict, authenticationController.createAccountWithEmailPassword)
 router.post("/login", rateLimiters.strict, authenticationController.loginWithPassword)
-router.post("/refresh", rateLimiters.moderate, authenticationController.refreshSession)
+// These routes consume the refresh cookie directly, so they need the CSRF
+// check explicitly. `authenticate` already includes it for protected routes.
+router.post("/refresh", rateLimiters.moderate, csrfProtection, authenticationController.refreshSession)
 router.get("/profile", authenticate, authenticationController.getProfile)
-router.post("/logout", authenticationController.logout)
+router.post("/logout", csrfProtection, authenticationController.logout)
 router.post(
     "/password/forgot",
     rateLimiters.strict,

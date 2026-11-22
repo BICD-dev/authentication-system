@@ -3,6 +3,7 @@ import { Env } from "../../config/env";
 import { HttpStatus } from "../../constant/http-status.enum";
 import { getCookie } from "../cookies";
 import { JwtService } from "../jwt/jwt.service";
+import { csrfProtection } from "./csrf.middleware";
 import { AppError } from "./errorHandler";
 
 function extractAccessToken(req: Request): string | null {
@@ -17,7 +18,27 @@ function extractAccessToken(req: Request): string | null {
   return getCookie(req, Env.ACCESS_TOKEN_COOKIE_NAME);
 }
 
-export const authenticate = async (
+/**
+ * Verifies the access token and, for unsafe methods that rely on auth cookies,
+ * enforces the CSRF double-submit check first. Bearer requests and safe methods
+ * skip the CSRF half automatically.
+ */
+export const authenticate = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  csrfProtection(req, res, (csrfError?: unknown) => {
+    if (csrfError) {
+      next(csrfError);
+      return;
+    }
+
+    void verifyAccessToken(req, res, next);
+  });
+};
+
+const verifyAccessToken = async (
   req: Request,
   _res: Response,
   next: NextFunction,
