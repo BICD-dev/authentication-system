@@ -1,6 +1,7 @@
 import nodemailer, { Transporter } from 'nodemailer';
 import { IEmailService, EmailOptions } from './IEmailService';
 import { Env } from '../../config/env';
+import { logger } from '../../config/logger';
 
 export class BrevoService implements IEmailService {
   private transporter: Transporter;
@@ -28,13 +29,14 @@ export class BrevoService implements IEmailService {
       connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 15000,
-      logger: true,
-      debug: true,
     });
   }
 
   async sendEmail(options: EmailOptions): Promise<void> {
-    console.info('Attempting to send email via Brevo to:', options.to);
+    logger.info('Sending email via Brevo', {
+      to: options.to,
+      subject: options.subject,
+    });
 
     try {
       await this.transporter.sendMail({
@@ -46,7 +48,10 @@ export class BrevoService implements IEmailService {
         attachments: options.attachments,
       });
     } catch (error: any) {
-      console.error('Failed to send email with Brevo:', error.message || error);
+      logger.error('Failed to send email via Brevo', {
+        message: error?.message ?? String(error),
+        stack: error?.stack ?? undefined,
+      });
       throw new Error(`Email sending failed: ${error.message || 'Internal Error'}`);
     }
   }

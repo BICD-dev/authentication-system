@@ -9,6 +9,15 @@ import {
 import { EmailServiceFactory } from "../../service/email/EmailServiceFactory";
 import { OTPService } from "../../utils/otp.service";
 import { Env } from "../../config/env";
+import { logger } from "../../config/logger";
+
+function logEventHandlerError(context: string, error: unknown): void {
+    logger.error(`${context} failed`, {
+        name: error instanceof Error ? error.name : "UnknownError",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+    });
+}
 
 // seperate these email templates later
 function buildWelcomeEmailHtml(firstName?: string | null): string {
@@ -91,7 +100,7 @@ export function registerAuthEventHandlers(): void {
             await sendWelcomeEmail( email, firstName);
             await sendVerificationEmail(userId, email, firstName);
         } catch (error) {
-            console.error("Error handling USER_REGISTERED event:", error);
+            logEventHandlerError("USER_REGISTERED event", error);
         }
     });
 }
@@ -103,7 +112,7 @@ export function sendVerificationEmailEventHandler(): void {
         try {
             await sendVerificationEmail(userId, email, firstName);
         } catch (error) {
-            console.error("Error handling SEND_VERIFICATION_EMAIL event:", error);
+            logEventHandlerError("SEND_VERIFICATION_EMAIL event", error);
         }
     });
 }
@@ -119,7 +128,7 @@ export function loginEventHandler(): void {
                 html: buildLoginNotificationEmailHtml(firstName),
             });
         } catch (error) {
-            console.error("Error handling USER_LOGGED_IN event:", error);
+            logEventHandlerError("USER_LOGGED_IN event", error);
         }
     });
 }
@@ -143,7 +152,7 @@ export function passwordResetEmailEventHandler(): void {
                 ),
             });
         } catch (error) {
-            console.error("Error handling SEND_PASSWORD_RESET_EMAIL event:", error);
+            logEventHandlerError("SEND_PASSWORD_RESET_EMAIL event", error);
         }
     });
 }
@@ -160,7 +169,7 @@ export function passwordChangedEventHandler(): void {
                 html: buildPasswordChangedEmailHtml(firstName),
             });
         } catch (error) {
-            console.error("Error handling PASSWORD_CHANGED event:", error);
+            logEventHandlerError("PASSWORD_CHANGED event", error);
         }
     });
 }
@@ -175,7 +184,7 @@ async function sendWelcomeEmail( email: string, firstName: string | null): Promi
         });
     }
     catch (error) {
-        console.error("Failed to send welcome email:", error);
+        logEventHandlerError("welcome email", error);
     }
 }
 
@@ -191,6 +200,6 @@ async function sendVerificationEmail(userId: string, email: string, firstName: s
             html: buildVerificationEmailHtml(firstName, verificationCode),
         });
     } catch (error) {
-        console.error("Failed to send verification email:", error);
+        logEventHandlerError("verification email", error);
     }
 }

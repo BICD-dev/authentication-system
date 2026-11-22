@@ -9,6 +9,7 @@ import { ErrorMessages } from "../../constant/error-messages.enum";
 import { HttpStatus } from "../../constant/http-status.enum";
 import { ApiErrorDetail } from "../../dtos/interface/response.interface";
 import { ResponseDto } from "../../dtos/response.dto";
+import { logger } from "../../config/logger";
 
 export class ErrorHandler extends Error {
     statusCode: number;
@@ -59,7 +60,7 @@ export const methodNotAllowed = (allowedMethods: string[]): RequestHandler => {
 
 export const globalErrorHandler: ErrorRequestHandler = (
     err,
-    _req,
+    req,
     res,
     _next
 ) => {
@@ -67,6 +68,28 @@ export const globalErrorHandler: ErrorRequestHandler = (
     const statusCode = isHandledError ? err.statusCode : HttpStatus.INTERNAL_SERVER_ERROR;
     const message = isHandledError ? err.message : ErrorMessages.INTERNAL_SERVER_ERROR;
     const errors = isHandledError ? err.errors : undefined;
+
+    const questionIndex = req.originalUrl.indexOf("?");
+    const path = questionIndex === -1
+        ? req.originalUrl
+        : req.originalUrl.slice(0, questionIndex);
+    const context = {
+        requestId: res.locals.requestId,
+        method: req.method,
+        path,
+        statusCode,
+        userId: req.user?.id ?? null,
+    };
+
+    if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+        logger.error(message, {
+            ...context,
+            name: err instanceof Error ? err.name : "UnknownError",
+            stack: err instanceof Error ? err.stack : String(err),
+        });
+    } else {
+        logger.warn(message, context);
+    }
 
     res.status(statusCode).json(ResponseDto.failure(statusCode, message, errors));
 };

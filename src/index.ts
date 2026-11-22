@@ -4,17 +4,18 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRouter from "./auth/auth.route";
 import { corsOptions } from "./config/cors";
-import {globalErrorHandler,notFoundHandler} from "./utils/middleware/errorHandler";
-import { registerEventHandlers } from "./events";
 import { Env } from "./config/env";
+import { logger } from "./config/logger";
+import { globalErrorHandler, notFoundHandler } from "./utils/middleware/errorHandler";
+import { registerEventHandlers } from "./events";
 import { prisma } from "./lib/prisma";
-import { RedisCache } from "./cache";
+import { CacheFactory } from "./cache";
+import { requestLogger } from "./utils/middleware/requestLogger.middleware";
 
 const app = express();
 const PORT = Env.PORT;
 
-const redisClient = new RedisCache(Env.REDIS_URL);
-
+app.use(requestLogger);
 app.use(helmet());
 app.use(cors(corsOptions));
 app.use(cookieParser());
@@ -30,25 +31,26 @@ let isShuttingDown = false;
 
 async function bootstrap() {
     try {
-        await redisClient.connect();
-        console.log("Redis connected successfully");
+        Env.assertEmailConfig();
+
+        await CacheFactory.connect();
+        logger.info("Cache connected", { provider: Env.CACHE_PROVIDER });
 
         await prisma.$connect();
-        console.log("Database connected successfully");
+        logger.info("Database connected");
 
         registerEventHandlers();
 
         server = app.listen(PORT, () => {
-            console.log(`Server is running on port ${PORT}`);
+            logger.info(`Server is running on port ${PORT}`);
+        });
+    } catch (error) {
+        logger.error("Application startup failed", {
+            name: error instanceof Error ? error.name : "UnknownError",
+            stack: error instanceof Error ? error.stack : String(error),
         });
 
-    } catch (error) {
-        console.error("Application startup failed:", error);
-
-        await Promise.allSettled([
-            redisClient.disconnect(),
-            prisma.$disconnect()
-        ]);
+        await Promise.allSettled([CacheFactory.disconnect(), prisma.$disconnect()]);
 
         process.exitCode = 1;
     }
@@ -58,7 +60,7 @@ const gracefulShutdown = async (signal: string) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
 
-    console.log(`${signal} received. Starting graceful shutdown...`);
+    logger.info(`${signal} received. Starting graceful shutdown...`);
 
     try {
         if (server) {
@@ -71,21 +73,26 @@ const gracefulShutdown = async (signal: string) => {
         }
 
         const results = await Promise.allSettled([
-            redisClient.disconnect(),
-            prisma.$disconnect()
+            CacheFactory.disconnect(),
+            prisma.$disconnect(),
         ]);
 
         results.forEach((result) => {
             if (result.status === "rejected") {
-                console.error("Resource shutdown failed:", result.reason);
+                logger.error("Resource shutdown failed", {
+                    name: result.reason instanceof Error ? result.reason.name : "UnknownError",
+                    stack: result.reason instanceof Error ? result.reason.stack : String(result.reason),
+                });
                 process.exitCode = 1;
             }
         });
 
-        console.log("Application shutdown completed.");
-
+        logger.info("Application shutdown completed.");
     } catch (error) {
-        console.error("Error during graceful shutdown:", error);
+        logger.error("Error during graceful shutdown", {
+            name: error instanceof Error ? error.name : "UnknownError",
+            stack: error instanceof Error ? error.stack : String(error),
+        });
         process.exitCode = 1;
     }
 };

@@ -12,8 +12,7 @@
   },
   "license": "ISC",
   "author": "Bright Iheagwam",
-  "type": "module",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon --watch src --exec tsx src/index.ts",
@@ -28,7 +27,6 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.5.0",
     "@types/nodemailer": "^8.0.0",
-    "@types/winston": "^2.4.4",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   },
@@ -45,7 +43,6 @@
     "express-rate-limit": "^8.7.4",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.4.1",
     "nodemailer": "^8.0.10",
     "nodemon": "^3.1.14",
     "prisma": "^7.7.0",

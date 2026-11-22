@@ -25,8 +25,9 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 - Email verification with OTP
 - Secure password hashing with bcrypt
 - Input validation and structured error handling
-- Provider-based email delivery (Gmail / Brevo)
+- Provider-based email delivery (Gmail / Brevo) with a reused transporter
 - Cache abstraction (memory / Redis)
+- Structured request logging and centralized error logging
 
 ### In progress / planned
 
@@ -57,6 +58,7 @@ The goal is to build a **robust, scalable, and extensible auth system** that can
 - **jsonwebtoken** (JWT handling)
 - **Redis** (optional cache provider)
 - **Nodemailer** with Gmail or Brevo SMTP
+- **Winston** (structured logging)
 
 ---
 
@@ -103,13 +105,19 @@ cd authentication-system
 
 # Install dependencies
 npm install
+
+# Generate the Prisma client (the generated folder is gitignored)
+npx prisma generate
 ```
 
 ## 🔑 Environment Variables
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory by copying `.env.example`.
 
-copy the content of `.env.example` into the newly created `.env`
+Only the credentials for the selected `EMAIL_PROVIDER` are required:
+`EMAIL_USER` and `EMAIL_APP_PASSWORD` for `gmail`, or `BREVO_SMTP_LOGIN`,
+`BREVO_SMTP_KEY`, and `BREVO_SENDER_EMAIL` for `brevo`. The app validates this
+at startup. `OTP_PEPPER` is also required when `NODE_ENV=production`.
 
 ## ▶️ Running the Application
 
@@ -117,12 +125,50 @@ copy the content of `.env.example` into the newly created `.env`
 # Development
 npm run dev
 
-# Build
+# Build (compiles src/ to dist/)
 npm run build
 
-# Production
+# Production (runs dist/index.js)
 npm start
 ```
+
+The build emits CommonJS, so no ESM loader is needed. With
+`CACHE_PROVIDER=memory` the app starts without Redis; set `CACHE_PROVIDER=redis`
+and `REDIS_URL` to share OTPs and rate-limit counters across instances. The
+cache connection is opened and closed by `CacheFactory` during startup and
+graceful shutdown.
+
+## ✉️ Email delivery and event bus
+
+`EmailServiceFactory` caches one service instance per provider, so a single
+SMTP transporter is reused for all emails in a process. Switching providers
+requires only changing `EMAIL_PROVIDER` and supplying that provider's variables.
+
+Auth side effects (welcome, verification, login notification, password reset,
+and password changed emails) are dispatched through an **in-process Node
+`EventEmitter`**. Listeners are not durable and are not retried: if the process
+exits after an event is emitted but before its listener finishes, that email is
+lost. Events are also local to one process, so running multiple instances does
+not distribute or coordinate work. A persistent queue/worker is the planned
+replacement before horizontal scaling; until then, run a single application
+instance and treat email delivery as best-effort.
+
+## 📝 Logging
+
+Logging uses Winston with one shared logger (`src/config/logger.ts`).
+
+- `LOG_LEVEL` defaults to `debug` in development and `info` in production.
+- Production logs are JSON; development logs are colorized and readable.
+- Console output is always enabled. Set `LOG_TO_FILE=true` to also write
+  `logs/app.log` and `logs/error.log` (Winston's built-in file transport; log
+  rotation is the deployment platform's responsibility).
+- Every HTTP request emits one `http request completed` entry with `requestId`,
+  `method`, `path`, `statusCode`, `durationMs`, `ip`, and `userId` when
+  authenticated. The same `requestId` is returned in the `X-Request-Id` header.
+- Errors are logged exactly once in `globalErrorHandler`: `warn` without a
+  stack for expected 4xx errors, `error` with a stack for 5xx/unexpected errors.
+- Query strings, request bodies, cookies, `Authorization` headers, OTPs,
+  password-reset tokens, and password hashes are never logged.
 
 ## 📦 Response Format
 
@@ -348,13 +394,15 @@ use `none` with `COOKIE_SECURE=true`. The server refuses to start when
 - Sensitive data stored in environment variables
 - Input validation to prevent injection attacks
 - Proper HTTP status codes and error handling
+- Request/error logging that excludes bodies, cookies, auth headers, OTPs,
+  reset tokens, and password hashes
 
 ## 🧪 Future Improvements
 
 - Add OAuth providers (Google, GitHub)
 - Implement MFA (2FA with OTP)
 - Extend rate limiting and brute-force protection to every auth endpoint
-- Audit logging
+- Persistent audit records using the unused `AuditLog` model
 - API documentation with Swagger
 
 ## 🤝 Contributing

@@ -1,4 +1,5 @@
 import { createClient, type RedisClientType } from "redis";
+import { logger } from "../config/logger";
 import { CacheStore } from "./cache.store";
 
 export class RedisCacheStore implements CacheStore {
@@ -11,7 +12,11 @@ export class RedisCacheStore implements CacheStore {
 		this.keyPrefix = keyPrefix;
 
 		this.client.on("error", (error) => {
-			console.error("Redis client error:", error);
+			logger.error("Redis client error", {
+				name: error.name,
+				message: error.message,
+				stack: error.stack,
+			});
 		});
 	}
 
@@ -69,5 +74,3 @@ export class RedisCacheStore implements CacheStore {
 	}
 }
 
-// Backward-compatible export in case RedisCache is already referenced elsewhere.
-export class RedisCache extends RedisCacheStore {}

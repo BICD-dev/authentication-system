@@ -3,6 +3,15 @@ import "dotenv/config";
 
 type NodeEnv = "development" | "production" | "test";
 type SameSiteOption = "lax" | "strict" | "none";
+export type EmailProvider = "gmail" | "brevo";
+type LogLevel =
+    | "error"
+    | "warn"
+    | "info"
+    | "http"
+    | "verbose"
+    | "debug"
+    | "silly";
 
 export class Env {
 	static readonly DATABASE_URL = Env.requireString("DATABASE_URL");
@@ -18,9 +27,18 @@ export class Env {
 		"JWT_REFRESH_EXPIRES_IN",
 		"7d"
 	);
-	static readonly EMAIL_USER = Env.requireString("EMAIL_USER");
-	static readonly EMAIL_APP_PASSWORD = Env.requireString("EMAIL_APP_PASSWORD");
-	static readonly EMAIL_PROVIDER = Env.requireString("EMAIL_PROVIDER");
+	// Only the selected provider's credentials are required. `assertEmailConfig`
+	// is called at startup so a bad selection fails fast.
+	static readonly EMAIL_PROVIDER = Env.optionalEnum<EmailProvider>(
+		"EMAIL_PROVIDER",
+		["gmail", "brevo"],
+		"gmail"
+	);
+	static readonly EMAIL_USER = Env.optionalString("EMAIL_USER", "");
+	static readonly EMAIL_APP_PASSWORD = Env.optionalString(
+		"EMAIL_APP_PASSWORD",
+		""
+	);
 	static readonly CACHE_PROVIDER = Env.optionalString("CACHE_PROVIDER", "memory");
 	static readonly REDIS_URL = Env.optionalString("REDIS_URL", "redis://127.0.0.1:6379");
 	static readonly REDIS_KEY_PREFIX = Env.optionalString("REDIS_KEY_PREFIX", "auth:");
@@ -110,6 +128,14 @@ export class Env {
 		30
 	);
 
+	// Logging
+	static readonly LOG_LEVEL = Env.optionalEnum<LogLevel>(
+		"LOG_LEVEL",
+		["error", "warn", "info", "http", "verbose", "debug", "silly"],
+		Env.NODE_ENV === "production" ? "info" : "debug"
+	);
+	static readonly LOG_TO_FILE = Env.optionalBoolean("LOG_TO_FILE", false);
+
 	// Optional Brevo SMTP settings (present in .env.example)
 	static readonly BREVO_SMTP_HOST = Env.optionalString(
 		"BREVO_SMTP_HOST",
@@ -120,6 +146,26 @@ export class Env {
 	static readonly BREVO_SMTP_KEY = Env.optionalString("BREVO_SMTP_KEY", "");
 	static readonly BREVO_SENDER_EMAIL = Env.optionalString("BREVO_SENDER_EMAIL", "");
 	static readonly BREVO_SENDER_NAME = Env.optionalString("BREVO_SENDER_NAME", "");
+
+	static assertEmailConfig(): void {
+		const missing: string[] = [];
+
+		if (Env.EMAIL_PROVIDER === "gmail") {
+			if (!Env.EMAIL_USER) missing.push("EMAIL_USER");
+			if (!Env.EMAIL_APP_PASSWORD) missing.push("EMAIL_APP_PASSWORD");
+		} else {
+			if (!Env.BREVO_SMTP_LOGIN) missing.push("BREVO_SMTP_LOGIN");
+			if (!Env.BREVO_SMTP_KEY) missing.push("BREVO_SMTP_KEY");
+			if (!Env.BREVO_SENDER_EMAIL) missing.push("BREVO_SENDER_EMAIL");
+		}
+
+		if (missing.length > 0) {
+			throw new Error(
+				`Missing ${Env.EMAIL_PROVIDER} email configuration: ${missing.join(", ")}`
+			);
+		}
+	}
+
 	private static requireString(name: string): string {
 		const value = process.env[name];
 		if (!value) {
