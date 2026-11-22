@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import "dotenv/config";
 
 type NodeEnv = "development" | "production" | "test";
@@ -79,7 +80,21 @@ export class Env {
 	);
 
 	// OTP / rate limiting
-	static readonly OTP_PEPPER = Env.optionalString("OTP_PEPPER", "");
+	static readonly OTP_PEPPER = (() => {
+		const pepper = Env.optionalString("OTP_PEPPER", "");
+		if (pepper) {
+			return pepper;
+		}
+		if (Env.NODE_ENV === "production") {
+			throw new Error("OTP_PEPPER is required in production");
+		}
+		// A per-process pepper keeps development hashes non-trivial. OTPs do not
+		// survive a restart in this mode, which is acceptable outside production.
+		return randomBytes(32).toString("hex");
+	})();
+	static readonly OTP_LENGTH = Env.optionalNumber("OTP_LENGTH", 6);
+	static readonly OTP_TTL_MINUTES = Env.optionalNumber("OTP_TTL_MINUTES", 15);
+	static readonly OTP_MAX_ATTEMPTS = Env.optionalNumber("OTP_MAX_ATTEMPTS", 5);
 	static readonly RATE_LIMIT_WINDOW_MS = Env.optionalNumber(
 		"RATE_LIMIT_WINDOW_MS",
 		60_000

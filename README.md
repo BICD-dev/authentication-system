@@ -215,15 +215,23 @@ missing, used, or expired tokens, consumes the token, updates the password and
 "password changed" notification email.
 
 Both endpoints use the shared `rateLimiters.strict` limiter: 5 requests per 15
-minutes per IP. Because the same instance is attached to both routes, they
+minutes per client. Because the same instance is attached to both routes, they
 share one budget. See [Rate limiting](#rate-limiting) for the other tiers and
 how to add per-email or per-token limits if they are needed later.
 
-Limits are enforced by `express-rate-limit` through a thin wrapper
-(`src/utils/middleware/rateLimit.middleware.ts`) that returns the standard
-`429` error envelope and the `RateLimit-*` headers. The limiter currently uses
-the in-memory store, which is per-process; a shared store (for example Redis)
-is required before running more than one instance.
+### Email verification OTPs
+
+`POST /api/auth/otp/verify` accepts `{ "email": "...", "otp": "123456" }`.
+`POST /api/auth/otp/resend` accepts `{ "email": "..." }` in the request body —
+the query string is no longer used.
+
+OTPs are generated with `crypto.randomInt`, stored only as HMAC-SHA256 hashes
+keyed by `OTP_PEPPER`, and expire after `OTP_TTL_MINUTES` (default `15`). Each
+wrong code increments an attempt counter; after `OTP_MAX_ATTEMPTS` (default
+`5`) failures the code is rejected until a new one is requested. Resending
+replaces the outstanding code. Verification uses a constant-time comparison and
+a successful verification consumes the code. `OTP_PEPPER` is required in
+production; in development a random per-process value is used when it is unset.
 
 ### Rate limiting
 
@@ -235,26 +243,38 @@ The middleware exports reusable tiers instead of one-off limiter functions:
 | `moderate` | 20 requests / 15 min                                | other write endpoints                                 |
 | `lax`      | `RATE_LIMIT_MAX_REQUESTS` / `RATE_LIMIT_WINDOW_MS`  | general API traffic (defaults to 60 requests / min)   |
 
-Ready-to-use, IP-based middlewares are available as `rateLimiters.strict`,
-`rateLimiters.moderate`, and `rateLimiters.lax`:
+Ready-to-use, IP-based middlewares are available as `rateLimiters.signup`,
+`rateLimiters.login`, `rateLimiters.refresh`, `rateLimiters.otpVerify`,
+`rateLimiters.otpResend`, `rateLimiters.strict` (password reset), plus the
+generic `rateLimiters.moderate` and `rateLimiters.lax`. Each named limiter has
+its own counter namespace:
 
 ```ts
-router.post("/login", rateLimiters.strict, authenticationController.login);
+router.post("/login", rateLimiters.login, authenticationController.login);
 router.get("/feed", rateLimiters.lax, feedController.list);
 ```
 
 Use `rateLimit(tier, options)` when a route needs overrides, such as a custom
-key generator, window, limit, or message:
+key generator, window, limit, message, or store name:
 
 ```ts
 const perEmail = rateLimit("strict", {
+  storeName: "login-per-email",
   keyGenerator: (req) => `email:${String(req.body?.email).trim().toLowerCase()}`,
 });
 ```
 
 A limiter instance keeps one counter per client across every route it is
 attached to, so routes that need independent budgets should each create their
-own instance with `rateLimit(tier)`.
+own instance with `rateLimit(tier, { storeName: "..." })`.
+
+Limits are enforced by `express-rate-limit` through a thin wrapper that returns
+the standard `429` error envelope and draft-7 `RateLimit` / `RateLimit-Policy`
+headers. IP keys go
+through `ipKeyGenerator`, so IPv6 clients are grouped by subnet. Counters are
+stored in the configured cache provider via `SharedRateLimitStore`: with
+`CACHE_PROVIDER=redis` they are shared across instances; with `memory` they are
+local to a single process. Each limiter uses its own `storeName` prefix.
 
 ### Browser clients: CORS, cookies, and CSRF
 
@@ -312,8 +332,11 @@ use `none` with `COOKIE_SECURE=true`. The server refuses to start when
 - User responses never include password hashes
 - Password-reset tokens are hashed at rest, single-use, time-limited, and
   rate-limited; a successful reset revokes all sessions
+- OTPs use `crypto.randomInt`, HMAC hashes, constant-time verification, and
+  attempt limits; codes are consumed on success
 - Abuse-prone endpoints are rate-limited with `express-rate-limit`, returning
-  `429` in the standard error envelope
+  `429` in the standard error envelope, with counters shared through the cache
+  provider
 - Forgot-password responses do not reveal whether an email is registered
 - Emails are normalized before storage and lookup
 - Sensitive data stored in environment variables

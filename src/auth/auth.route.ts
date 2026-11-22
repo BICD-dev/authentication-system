@@ -8,11 +8,11 @@ const authenticationController = new AuthController()
 router.get("/csrf", authenticationController.issueCsrfToken)
 
 // Email and password
-router.post("/signup",authenticationController.createAccountWithEmailPassword  )
-router.post("/login",authenticationController.loginWithPassword)
-router.post("/refresh",authenticationController.refreshSession)
-router.get("/profile",authenticate,authenticationController.getProfile)
-router.post("/logout",authenticationController.logout)
+router.post("/signup", rateLimiters.strict, authenticationController.createAccountWithEmailPassword)
+router.post("/login", rateLimiters.strict, authenticationController.loginWithPassword)
+router.post("/refresh", rateLimiters.moderate, authenticationController.refreshSession)
+router.get("/profile", authenticate, authenticationController.getProfile)
+router.post("/logout", authenticationController.logout)
 router.post(
     "/password/forgot",
     rateLimiters.strict,
@@ -23,8 +23,8 @@ router.post(
     rateLimiters.strict,
     authenticationController.resetPassword
 )
-router.post("/otp/verify",authenticationController.verifyEmailOtp)
-router.post("/otp/resend",authenticationController.resendEmailOtp)
+router.post("/otp/verify", rateLimiters.strict, authenticationController.verifyEmailOtp)
+router.post("/otp/resend", rateLimiters.strict, authenticationController.resendEmailOtp)
 // username and password
 
 
@@ -37,5 +37,3 @@ router.post("/otp/resend",authenticationController.resendEmailOtp)
 // apple Oauth
 
 export default router;
-
-

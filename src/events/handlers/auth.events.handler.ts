@@ -8,7 +8,6 @@ import {
 } from "../interface/auth.events.interface";
 import { EmailServiceFactory } from "../../service/email/EmailServiceFactory";
 import { OTPService } from "../../utils/otp.service";
-import { CacheFactory } from "../../cache/cache.factory";
 import { Env } from "../../config/env";
 
 // seperate these email templates later
@@ -183,16 +182,8 @@ async function sendWelcomeEmail( email: string, firstName: string | null): Promi
 async function sendVerificationEmail(userId: string, email: string, firstName: string | null): Promise<void> {
     const emailService = EmailServiceFactory.createEmailService();
     const otpService = new OTPService();
-    const verificationCode = otpService.generateVerificationCode();
-    const verificationExpiry = otpService.generateVerificationExpiry(15);
-    const cache = CacheFactory.createCacheStore();
-    const otpKey = `email_verification:${userId}`;
-    const otpPayload = JSON.stringify({
-        code: verificationCode,
-        expiresAt: verificationExpiry.toISOString(),
-    });
+    const verificationCode = await otpService.createOtp(userId, email);
 
-    await cache.set(otpKey, otpPayload, 15 * 60); // store for 15 minutes
     try {
         await emailService.sendEmail({
             to: email,

@@ -4,6 +4,7 @@ import { CacheStore } from "./cache.store";
 export class RedisCacheStore implements CacheStore {
 	private readonly client: RedisClientType;
 	private readonly keyPrefix: string;
+	private connection: Promise<void> | null = null;
 
 	constructor(redisUrl: string, keyPrefix: string = "auth:") {
 		this.client = createClient({ url: redisUrl });
@@ -19,12 +20,28 @@ export class RedisCacheStore implements CacheStore {
 	}
 
 	async connect(): Promise<void> {
-		if (!this.client.isOpen) {
-			await this.client.connect();
+		if (this.client.isOpen) {
+			return;
 		}
+
+		if (!this.connection) {
+			this.connection = this.client.connect()
+				.then(() => undefined)
+				.finally(() => {
+					this.connection = null;
+				});
+		}
+
+		await this.connection;
+	}
+
+	/** Stores created by CacheFactory may be used before bootstrap connects them. */
+	private async ensureConnected(): Promise<void> {
+		await this.connect();
 	}
 
 	async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
+		await this.ensureConnected();
 
 		const namespacedKey = this.getKey(key);
 		if (ttlSeconds && ttlSeconds > 0) {
@@ -36,10 +53,12 @@ export class RedisCacheStore implements CacheStore {
 	}
 
 	async get(key: string): Promise<string | null> {
+		await this.ensureConnected();
 		return this.client.get(this.getKey(key));
 	}
 
 	async del(key: string): Promise<void> {
+		await this.ensureConnected();
 		await this.client.del(this.getKey(key));
 	}
 

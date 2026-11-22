@@ -3,18 +3,19 @@ import { UserRepository } from "../repositories/user.repository";
 import { MagicLinkRepository } from "../repositories/magic-link.repository";
 import { BcryptService } from "../utils/bcrypt/bcrypt.service";
 import { JwtService } from "../utils/jwt/jwt.service";
+import { OTPService } from "../utils/otp.service";
 import { AppError } from "../utils/middleware/errorHandler";
 import { validateDto } from "../utils/validate.dto";
 import { CreateAccountDto } from "./dto/createAccount.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginWithPasswordDto } from "./dto/loginWithPassword.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { ResendEmailOtpDto } from "./dto/resend-email-otp.dto";
 import { IAuthService } from "./interface/auth.service.interface";
 import { prisma } from "../lib/prisma";
 import "dotenv/config"
 import { EventsService } from "../events/events.service";
 import { VerifyEmailOtpDto } from "./dto/verifyEmailOtp.dto";
-import { CacheFactory, CacheStore } from "../cache";
 import { Env } from "../config/env";
 import { SessionMetadata, SessionService } from "../session/session.service";
 import { MagicLinkType, UserStatus, type User } from "../generated/prisma/client";
@@ -33,7 +34,7 @@ export class AuthenticationService implements IAuthService {
     private readonly bcryptService: BcryptService
     private readonly jwtService: JwtService
     private readonly eventsService: EventsService
-    private readonly redisCacheStore: CacheStore
+    private readonly otpService: OTPService
     private readonly sessionService: SessionService
     constructor() {
         this.userRepository = new UserRepository()
@@ -41,7 +42,7 @@ export class AuthenticationService implements IAuthService {
         this.bcryptService = new BcryptService()
         this.jwtService = new JwtService(Env.JWT_SECRET, Env.JWT_EXPIRES_IN)
         this.eventsService = new EventsService()
-        this.redisCacheStore = CacheFactory.createCacheStore()
+        this.otpService = new OTPService()
         this.sessionService = new SessionService()
     }
 
@@ -259,61 +260,31 @@ export class AuthenticationService implements IAuthService {
     }
 
     async verifyEmailOtp(data: VerifyEmailOtpDto): Promise<any> {
-        // validate input data
         const validate = await validateDto(VerifyEmailOtpDto, data);
         const { email, otp } = validate;
         const user = await this.userRepository.findByEmail(email);
-        if (!user) {
-            throw new AppError(404, "User not found");
-        }
-
-        const otpKey = `email_verification:${user.id}`;
-        const otpRecordRaw = await this.redisCacheStore.get(otpKey);
-        if (!otpRecordRaw) {
+        if (!user || user.deletedAt || !user.email) {
             throw new AppError(400, "OTP is invalid or has expired");
         }
 
-        let otpRecord: { code?: string; expiresAt?: string };
-        try {
-            otpRecord = JSON.parse(otpRecordRaw);
-        } catch {
-            throw new AppError(400, "OTP is invalid or has expired");
-        }
-
-        if (!otpRecord.code || otpRecord.code !== otp) {
-            throw new AppError(400, "OTP is invalid or has expired");
-        }
-
-        const expiresAt = otpRecord.expiresAt ? new Date(otpRecord.expiresAt) : null;
-        if (!expiresAt || expiresAt.getTime() <= Date.now()) {
-            await this.redisCacheStore.del(otpKey);
-            throw new AppError(400, "OTP is invalid or has expired");
-        }
-
-        // if valid, activate the user's account and delete the otp record
+        await this.otpService.verifyOtp(user.id, user.email, otp);
         await this.userRepository.setEmailVerifiedAt(user.id);
-        await this.redisCacheStore.del(otpKey);
+
         return { message: "Email verified successfully" };
     }
 
-    async resendEmailVerificationOtp(email: string): Promise<void> {
+    async resendEmailVerificationOtp(data: ResendEmailOtpDto): Promise<void> {
+        const { email } = await validateDto(ResendEmailOtpDto, data);
         const user = await this.userRepository.findByEmail(email);
-        if (!user) {
-            console.log(`user with email ${email} does not exist `);
+        if (!user || user.deletedAt || !user.email || user.emailVerifiedAt) {
             return;
         }
-        if (user.emailVerifiedAt) {
-            console.log(`user with email ${email} is already verified `);
-            return;
-        }
-        // emit event to trigger the sending of the email verification otp
+
         this.eventsService.emitSendVerificationEmail({
             userId: user.id,
             firstName: user.firstName,
-            email: email,
+            email: user.email,
         });
-
-        return;
     }
 
     private async createSessionForUser(user: User, metadata?: SessionMetadata): Promise<AuthSessionResult> {

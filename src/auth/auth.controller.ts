@@ -194,14 +194,7 @@ export class AuthController {
 
     resendEmailOtp:RequestHandler = async (req:Request, res:Response, next:NextFunction)=>{
         try {
-            const { email } = req.query;
-            if (!email) {
-                throw new AppError(
-                    HttpStatus.BAD_REQUEST,
-                    "Email query parameter is required"
-                );
-            }
-            await this.authService.resendEmailVerificationOtp(email as string);
+            await this.authService.resendEmailVerificationOtp(req.body ?? {});
             const resObj = ResponseDto.success(
                 HttpStatus.OK,
                 SuccessMessages.EMAIL_VERIFICATION_RESENT

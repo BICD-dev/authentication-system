@@ -8,6 +8,7 @@ export enum ErrorMessages{
     INTERNAL_SERVER_ERROR="Internal Server Error",
     BAD_REQUEST="Bad Request. Please check your input and try again",
     MISSING_FIELDS="Missing fields",
+    INVALID_OTP_MESSAGE = "OTP is invalid or has expired",
 
 
 }
